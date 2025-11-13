@@ -3,7 +3,7 @@ import React, { useState, useRef, useCallback, useEffect } from 'react';
 
 // Import services and types
 import { onAuthStateChangedListener, type User } from './services/firebaseService';
-import type { EditablePlatform, GeneratedContent, BrandVoiceProfile } from './types';
+import type { EditablePlatform, GeneratedContent, BrandVoiceProfile, View } from './types';
 
 // Import components
 import { Header } from './components/Header';
@@ -11,8 +11,11 @@ import { TopicForm } from './components/TopicForm';
 import { LoadingDisplay } from './components/LoadingDisplay';
 import { ContentTabs } from './components/ContentTabs';
 import { ProjectsDashboard } from './components/ProjectsDashboard';
+import { BrandVoiceDashboard } from './components/BrandVoiceDashboard';
+import { AccountDashboard } from './components/AccountDashboard';
 import { GenerationProvider, useGeneration } from './contexts/GenerationContext';
 import { GenerationQueueWidget } from './components/GenerationQueueWidget';
+import { TrendIcon, AiIcon, RocketIcon } from './components/Icons';
 
 
 // Custom hook to handle scroll animations using Intersection Observer
@@ -41,29 +44,10 @@ const useScrollAnimation = () => {
   }, []);
 };
 
-// --- SVG ICON COMPONENTS ---
-const TrendIcon: React.FC<{ className?: string }> = ({ className }) => (
-    <svg className={className} xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
-    </svg>
-);
-const AiIcon: React.FC<{ className?: string }> = ({ className }) => (
-    <svg className={className} xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M9.75 3.104v5.714a2.25 2.25 0 01-.5 1.591L5.25 15.25M9.75 3.104a2.25 2.25 0 00-3.364-.623l-2.25 2.25a2.25 2.25 0 00-.623 3.364v5.714a2.25 2.25 0 001.591.5l9.75-9.75M9.75 3.104a2.25 2.25 0 013.364-.623l2.25 2.25a2.25 2.25 0 01.623 3.364v5.714a2.25 2.25 0 01-1.591.5l-9.75-9.75" />
-    </svg>
-);
-const RocketIcon: React.FC<{ className?: string }> = ({ className }) => (
-    <svg className={className} xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M15.59 14.37a6 6 0 01-5.84 7.38v-4.8m5.84-2.58a14.98 14.98 0 006.16-12.12A14.98 14.98 0 009.63 2.45v5.7m5.96 5.96a14.926 14.926 0 01-5.841 2.58m-.119-8.54a6 6 0 00-7.381 5.84h4.8m2.581-5.84a14.927 14.927 0 00-2.58 5.84m2.699 2.7c-.103.021-.207.041-.311.06a15.09 15.09 0 01-2.448-2.448c.019-.104.039-.207.06-.311m-4.8 5.84c.041.104.082.207.124.311a15.09 15.09 0 01-2.448-2.448c.104-.042.207-.082.311-.124m2.448 2.448a6 6 0 01-3.408 1.472h9.456a6 6 0 01-3.408-1.472z" />
-    </svg>
-);
-
 // --- HELPER COMPONENTS ---
 const NeonDivider: React.FC = () => (
     <div className="w-full h-px bg-gradient-to-r from-transparent via-pink-500/30 to-transparent my-20"></div>
 );
-
-type View = 'creator' | 'dashboard';
 
 const MainApp: React.FC = () => {
     useScrollAnimation();
@@ -80,30 +64,24 @@ const MainApp: React.FC = () => {
     const contentRef = useRef<HTMLDivElement>(null);
     
     const { startGeneration, activeGenerations, cancelGeneration } = useGeneration();
-    const isLoading = activeGenerations.length > 0; // Simplified loading state
     const mainGenerationTask = activeGenerations.find(g => g.context.view === 'creator');
 
 
     useEffect(() => {
         const unsubscribe = onAuthStateChangedListener((user) => {
             setCurrentUser(user);
-            if (user) {
-                // If user is logged in, default to dashboard view
-                setView('dashboard');
-            } else {
-                // If user logs out, or is not logged in, show creator view
-                setView('creator');
-            }
+            setView(user ? 'projects' : 'creator');
         });
         return unsubscribe;
     }, []);
     
-    const handleNavigate = (newView: View) => {
-        // Reset state when navigating between main views
+    const handleNavigate = useCallback((newView: View) => {
         setGeneratedContent(null);
-        setTopic('');
+        if (newView === 'creator') {
+            setTopic('');
+        }
         setView(newView);
-    }
+    }, []);
 
     const handleGenerate = useCallback(async (brandVoiceProfile?: BrandVoiceProfile) => {
         if (!topic.trim() || selectedPlatforms.size === 0) return;
@@ -118,9 +96,8 @@ const MainApp: React.FC = () => {
             progress: 0,
             message: 'Starting generation...',
             context: {
-                // Fix: Add missing 'type' property. This is a content generation task.
                 type: 'content',
-                view: 'creator', // To distinguish from dashboard generations
+                view: 'creator',
                 params: {
                     topic,
                     language,
@@ -138,6 +115,28 @@ const MainApp: React.FC = () => {
         });
         
     }, [topic, language, shouldGenerateImage, selectedPlatforms, startGeneration]);
+    
+    const isDashboardView = ['projects', 'brandVoice', 'account'].includes(view);
+    const dashboardTitles: Record<string, string> = {
+        projects: 'Content Dashboard',
+        brandVoice: 'Brand Voice Co-Pilot',
+        account: 'My Account'
+    };
+    const currentDashboardTitle = dashboardTitles[view] || '';
+
+    const renderDashboard = () => {
+        if (!currentUser) return null;
+        switch (view) {
+            case 'projects':
+                return <ProjectsDashboard user={currentUser} onNavigate={handleNavigate} />;
+            case 'brandVoice':
+                return <BrandVoiceDashboard user={currentUser} />;
+            case 'account':
+                return <AccountDashboard user={currentUser} />;
+            default:
+                return null;
+        }
+    };
 
     return (
         <div className="bg-black text-[#EAEAEA] font-sans overflow-x-hidden">
@@ -221,8 +220,13 @@ const MainApp: React.FC = () => {
                     </section>
                 </>
               )}
-              {view === 'dashboard' && currentUser && (
-                <ProjectsDashboard user={currentUser} />
+              {isDashboardView && (
+                <section className="animate-fade-in min-h-[70vh]">
+                    <h1 className="text-4xl md:text-5xl font-black uppercase tracking-tighter mb-8">
+                        {currentDashboardTitle.split(' ').slice(0, -1).join(' ')} <span className="text-pink-500">{currentDashboardTitle.split(' ').pop()}</span>
+                    </h1>
+                    {renderDashboard()}
+                </section>
               )}
             </main>
             <footer className="container mx-auto px-4 text-center py-8 text-zinc-500 border-t border-zinc-900 mt-20">

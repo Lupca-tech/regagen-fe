@@ -1,7 +1,8 @@
+
 import React, { createContext, useContext, useState, useCallback, useEffect, useRef } from 'react';
 import { generateContentFlow, generateTopicsAI } from '../services/geminiService';
-import { saveGeneratedContent, addMultipleTopics, type User } from '../services/firebaseService';
-import type { GeneratedContent, EditablePlatform, Topic, BrandVoiceProfile } from '../types';
+import { saveGeneratedContent, addMultipleTopics } from '../services/firebaseService';
+import type { GeneratedContent, Topic, BrandVoiceProfile } from '../types';
 
 export interface GenerationTask {
     id: string;
@@ -12,8 +13,8 @@ export interface GenerationTask {
     context: {
         type: 'content' | 'topics';
         view: 'creator' | 'dashboard';
-        params: any; // Could be creator form state or a Topic object
-        onSuccess?: (result: any) => void;
+        params: any;
+        onSuccess?: (result?: any) => void;
     };
 }
 
@@ -34,7 +35,6 @@ export const GenerationProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     const [isProgressModalVisible, setIsProgressModalVisible] = useState(false);
     const cancelledTaskIds = useRef(new Set<string>());
 
-
     const showProgressModal = useCallback(() => setIsProgressModalVisible(true), []);
     const hideProgressModal = useCallback(() => setIsProgressModalVisible(false), []);
 
@@ -45,13 +45,11 @@ export const GenerationProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     }, []);
 
     const removeTask = useCallback((id: string) => {
-        // Keep successful/failed tasks for a few seconds before removing
         setTimeout(() => {
             setTasks(prevTasks => prevTasks.filter(task => task.id !== id));
         }, 5000);
     }, []);
     
-    // Effect to hide the modal when all tasks are gone.
     useEffect(() => {
         if (tasks.length === 0) {
             hideProgressModal();
@@ -62,83 +60,59 @@ export const GenerationProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         updateTask(task.id, { status: 'running', progress: 5, message: 'Initializing...' });
 
         const onProgress = (progress: number, message: string) => {
+            if (cancelledTaskIds.current.has(task.id)) return;
             updateTask(task.id, { progress, message });
         };
         
         try {
-            if (cancelledTaskIds.current.has(task.id)) {
-                console.log(`Task ${task.id} was cancelled before starting.`);
-                cancelledTaskIds.current.delete(task.id);
-                return; // Stop processing
-            }
+            if (cancelledTaskIds.current.has(task.id)) return;
             
+            let result: any;
             if (task.context.type === 'topics') {
                 const { project, campaign, count, userId } = task.context.params;
                 onProgress(20, 'Brainstorming ideas...');
                 const generatedTopics = await generateTopicsAI(project, campaign, count);
-                
-                if (cancelledTaskIds.current.has(task.id)) {
-                    console.log(`Task ${task.id} was cancelled. Aborting save.`);
-                    cancelledTaskIds.current.delete(task.id);
-                    return;
-                }
+                if (cancelledTaskIds.current.has(task.id)) return;
 
                 onProgress(80, 'Saving new topics...');
                 const topicsToAdd = generatedTopics.map(name => ({ name }));
                 await addMultipleTopics(topicsToAdd, userId, project.id, campaign.id);
+
             } else { // 'content' generation
-                let result: GeneratedContent;
-
-                if (task.context.view === 'dashboard') {
-                    const { topic, userId, language, shouldGenerateImage, selectedPlatforms, brandVoiceProfile } = task.context.params as {
-                        topic: Topic; userId: string; language: string; shouldGenerateImage: boolean; selectedPlatforms: Set<EditablePlatform>; brandVoiceProfile?: BrandVoiceProfile;
-                    };
-                    result = await generateContentFlow(topic.name, language, shouldGenerateImage, selectedPlatforms, onProgress, brandVoiceProfile);
-                } else { // Creator view
-                    const { topic, language, shouldGenerateImage, selectedPlatforms, brandVoiceProfile } = task.context.params;
-                    result = await generateContentFlow(topic, language, shouldGenerateImage, selectedPlatforms, onProgress, brandVoiceProfile);
-                }
+                const { topic, language, shouldGenerateImage, selectedPlatforms, brandVoiceProfile } = task.context.params;
+                const topicName = task.context.view === 'dashboard' ? topic.name : topic;
+                result = await generateContentFlow(topicName, language, shouldGenerateImage, selectedPlatforms, onProgress, brandVoiceProfile);
                 
-                if (cancelledTaskIds.current.has(task.id)) {
-                    console.log(`Task ${task.id} was cancelled. Aborting save and success callbacks.`);
-                    cancelledTaskIds.current.delete(task.id); // Clean up
-                    return; // Stop further processing
-                }
+                if (cancelledTaskIds.current.has(task.id)) return;
 
                 if (task.context.view === 'dashboard') {
-                     const { topic, userId, language } = task.context.params;
+                     const { topic: topicObject, userId } = task.context.params;
                      onProgress(98, "Saving to database...");
-                     const generationContext = { projectId: topic.projectId, campaignId: topic.campaignId, topicId: topic.id };
-                     await saveGeneratedContent(userId, topic.name, language, result, generationContext);
+                     const generationContext = { projectId: topicObject.projectId, campaignId: topicObject.campaignId, topicId: topicObject.id };
+                     await saveGeneratedContent(userId, topicObject.name, language, result, generationContext);
                 }
-                
-                task.context.onSuccess?.(result);
             }
 
-            // Common success path for all task types
+            if (cancelledTaskIds.current.has(task.id)) return;
+
             updateTask(task.id, { status: 'success', progress: 100, message: 'Completed!' });
-            if (task.context.type === 'topics') {
-                task.context.onSuccess?.(null); // No specific result, just signal success for refetch
-            }
+            task.context.onSuccess?.(result);
             removeTask(task.id);
+
         } catch (e: any) {
-             if (cancelledTaskIds.current.has(task.id)) {
-                console.log(`Task ${task.id} was cancelled during an error. Ignoring error state.`);
-                cancelledTaskIds.current.delete(task.id);
-                return;
-            }
+             if (cancelledTaskIds.current.has(task.id)) return;
             console.error(`Generation failed for task ${task.id}:`, e);
             updateTask(task.id, { status: 'error', progress: 100, message: e.message || 'An unknown error occurred.' });
             removeTask(task.id);
+        } finally {
+            cancelledTaskIds.current.delete(task.id);
         }
     }, [updateTask, removeTask]);
 
-    // Effect to process the queue
     useEffect(() => {
         const runningTasks = tasks.filter(t => t.status === 'running').length;
         const queuedTask = tasks.find(t => t.status === 'queued');
         
-        // Simple concurrency limit: process one at a time
         if (runningTasks === 0 && queuedTask) {
             processTask(queuedTask);
         }

@@ -1,14 +1,7 @@
+
 import React from 'react';
 import { useGeneration, GenerationTask } from '../contexts/GenerationContext';
-
-const SparkleIcon = ({ className = 'w-5 h-5' }) => <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className={className}><path fillRule="evenodd" d="M9 4.5a.75.75 0 01.75.75V6h.75a.75.75 0 010 1.5H9.75v.75a.75.75 0 01-1.5 0V7.5H7.5a.75.75 0 010-1.5H8.25V5.25A.75.75 0 019 4.5zM12.75 7.5a.75.75 0 01.75-.75H15v-.75a.75.75 0 011.5 0V6.75H17.25a.75.75 0 010 1.5H16.5v.75a.75.75 0 01-1.5 0V8.25H13.5a.75.75 0 01-.75-.75zM15 12a.75.75 0 01.75.75V15h.75a.75.75 0 010 1.5H15.75v.75a.75.75 0 01-1.5 0V16.5H13.5a.75.75 0 010-1.5H14.25v-.75A.75.75 0 0115 12zM12 1.5a.75.75 0 01.75.75V3h.75a.75.75 0 010 1.5H12.75v.75a.75.75 0 01-1.5 0V4.5H10.5a.75.75 0 010-1.5H11.25V2.25A.75.75 0 0112 1.5zM10.5 18.75a.75.75 0 01.75.75V21h.75a.75.75 0 010 1.5H11.25v.75a.75.75 0 01-1.5 0V22.5H9a.75.75 0 010-1.5h.75v-.75a.75.75 0 01.75-.75zM18.75 10.5a.75.75 0 01.75.75V12h.75a.75.75 0 010 1.5H19.5v.75a.75.75 0 01-1.5 0V13.5H17.25a.75.75 0 010-1.5H18v-.75a.75.75 0 01.75-.75z" clipRule="evenodd" /></svg>;
-const CheckCircleIcon = ({ className = 'w-5 h-5' }) => <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className={className}><path fillRule="evenodd" d="M2.25 12c0-5.385 4.365-9.75 9.75-9.75s9.75 4.365 9.75 9.75-4.365 9.75-9.75 9.75S2.25 17.385 2.25 12zm13.36-1.814a.75.75 0 10-1.22-.872l-3.236 4.53L9.53 12.22a.75.75 0 00-1.06 1.06l2.25 2.25a.75.75 0 001.14-.094l3.75-5.25z" clipRule="evenodd" /></svg>;
-const ExclamationCircleIcon = ({ className = 'w-5 h-5' }) => <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className={className}><path fillRule="evenodd" d="M12 2.25c-5.385 0-9.75 4.365-9.75 9.75s4.365 9.75 9.75 9.75 9.75-4.365 9.75-9.75S17.385 2.25 12 2.25zm-1.72 6.97a.75.75 0 10-1.06 1.06L10.94 12l-1.72 1.72a.75.75 0 101.06 1.06L12 13.06l1.72 1.72a.75.75 0 101.06-1.06L13.06 12l1.72-1.72a.75.75 0 10-1.06-1.06L12 10.94l-1.72-1.72z" clipRule="evenodd" /></svg>;
-const XIcon: React.FC<{ className?: string }> = ({ className }) => (
-    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className={className}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-    </svg>
-);
+import { SparkleIcon, CheckCircleIcon, ExclamationCircleIcon, XIcon } from './Icons';
 
 const GenerationTaskItem: React.FC<{
     task: GenerationTask;
@@ -67,7 +60,7 @@ export const GenerationQueueWidget = () => {
     }
 
     if (isProgressModalVisible) {
-        if (!activeTask) return null; // Should not happen if generations exist
+        if (!activeTask) return null;
         const otherTasks = activeGenerations.filter(t => t.id !== activeTask.id);
 
         return (
