@@ -1,0 +1,5 @@
+{
+  "name": "RageGen",
+  "description": "An AI-powered application that generates and adapts content for various platforms based on a single topic. It finds trends, writes a core article, generates an image, and tailors the content for Web, Facebook, TikTok, and YouTube.",
+  "requestFramePermissions": []
+}
