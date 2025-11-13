@@ -3,6 +3,7 @@ import React, { useState, useCallback, useEffect } from 'react';
 import { regeneratePlatformContent } from '../services/geminiService';
 import type { GeneratedContent, EditablePlatform } from '../types';
 import { ArticleIcon, WebIcon, FacebookIcon, LinkedInIcon, XIcon, TikTokIcon, YouTubeIcon, ClipboardIcon, CheckIcon, CodeBracketIcon, SparkleIcon } from './Icons';
+import { useGeneration } from '../contexts/GenerationContext';
 
 type Tab = 'main' | EditablePlatform;
 
@@ -75,23 +76,43 @@ const ContentEditor: React.FC<{
     onContentUpdate: (platform: EditablePlatform, newContent: any) => void;
 }> = React.memo(({ platform, topic, language, currentContent, onContentUpdate }) => {
     const [prompt, setPrompt] = useState('');
-    const [isRegenerating, setIsRegenerating] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const { startGeneration, activeGenerations } = useGeneration();
+
+    const isRegenerating = activeGenerations.some(
+        task => task.context.type === 'refineContent' && 
+                task.context.params.platform === platform && 
+                (task.status === 'running' || task.status === 'queued')
+    );
 
     const handleRegenerate = useCallback(async () => {
         if (!prompt.trim() || isRegenerating) return;
-        setIsRegenerating(true);
         setError(null);
-        try {
-            const newContent = await regeneratePlatformContent(platform, topic, currentContent, prompt, language);
-            onContentUpdate(platform, newContent);
-            setPrompt('');
-        } catch (e: any) {
-            setError(e.message || "Failed to regenerate content. Please try again.");
-        } finally {
-            setIsRegenerating(false);
-        }
-    }, [prompt, isRegenerating, platform, topic, currentContent, language, onContentUpdate]);
+
+        const generationId = `refine-${platform}-${Date.now()}`;
+        startGeneration({
+            id: generationId,
+            topicName: `${topic} - Refine ${platform}`,
+            status: 'queued',
+            progress: 0,
+            message: `Refining ${platform} content...`,
+            context: {
+                type: 'refineContent',
+                view: 'creator', // Or 'dashboard' if applicable
+                params: {
+                    platform,
+                    topic,
+                    language,
+                    currentContent,
+                    userPrompt: prompt,
+                },
+                onSuccess: (newContent: any) => {
+                    onContentUpdate(platform, newContent);
+                    setPrompt('');
+                }
+            }
+        });
+    }, [prompt, isRegenerating, platform, topic, language, currentContent, onContentUpdate, startGeneration]);
     
     const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLTextAreaElement>) => {
         if (e.key === 'Enter' && !e.shiftKey) {
@@ -133,10 +154,8 @@ const ContentEditor: React.FC<{
 const ContentCard: React.FC<{ 
     title?: string; 
     children: React.ReactNode; 
-    copyText?: string;
-    editor?: React.ReactNode;
-    isReadOnly?: boolean;
-}> = React.memo(({ title, children, copyText, editor, isReadOnly }) => (
+    copyText?: string; 
+}> = React.memo(({ title, children, copyText }) => (
     <div className="bg-gray-800 p-6 rounded-b-xl border-t-0 border border-gray-700">
         <div className="flex justify-between items-start mb-4">
             {title && (
@@ -147,7 +166,6 @@ const ContentCard: React.FC<{
         <div className="prose prose-invert max-w-none text-gray-300 prose-headings:text-gray-100 prose-strong:text-white">
             {children}
         </div>
-        {!isReadOnly && editor}
     </div>
 ));
 
@@ -156,9 +174,11 @@ export const ContentTabs: React.FC<ContentTabsProps> = ({ content, topic, langua
   const [webContentView, setWebContentView] = useState<'text' | 'html'>('text');
 
   useEffect(() => {
+    // Reset to 'main' if the current active tab's content is no longer available
     if (activeTab !== 'main' && !content[activeTab]) {
         setActiveTab('main');
     }
+    // Reset web content view when changing tabs
     if (activeTab !== 'web') {
       setWebContentView('text');
     }
@@ -181,7 +201,6 @@ export const ContentTabs: React.FC<ContentTabsProps> = ({ content, topic, langua
             <ContentCard 
                 title={content.mainArticle.title}
                 copyText={`Title: ${content.mainArticle.title}\n\n${content.mainArticle.body}`}
-                isReadOnly={isReadOnly}
             >
                  {content.image.url ? (
                     <>
@@ -198,21 +217,43 @@ export const ContentTabs: React.FC<ContentTabsProps> = ({ content, topic, langua
         );
       case 'web': {
         if (!content.web) return null;
-        const copyText = webContentView === 'text'
-          ? `Meta Title: ${content.web.metaTitle}\n\nMeta Description: ${content.web.metaDescription}\n\n${content.web.body}`
-          : content.web.htmlBody;
         
+        const metaDescriptionLength = content.web.metaDescription.length;
+        let metaDescriptionCharCountClass = 'text-red-500'; // Default to red
+        if (metaDescriptionLength >= 150 && metaDescriptionLength <= 160) {
+            metaDescriptionCharCountClass = 'text-green-500'; // Optimal
+        } else if (metaDescriptionLength >= 120 && metaDescriptionLength <= 170) {
+            metaDescriptionCharCountClass = 'text-yellow-500'; // Acceptable but not optimal
+        }
+
         return (
             <ContentCard 
                 title="Web Content (SEO Optimized)"
-                copyText={copyText}
-                editor={editorFor('web')}
-                isReadOnly={isReadOnly}
+                copyText={`Meta Title: ${content.web.metaTitle}\nMeta Description: ${content.web.metaDescription}\nFocus Keyword: ${content.web.focusKeyword}\n\n${content.web.body}`}
             >
-                <h4 className="font-bold text-gray-400">Meta Title:</h4>
+                <div className="flex justify-between items-center mb-1">
+                    <h4 className="font-bold text-gray-400">Meta Title:</h4>
+                    <CopyButton textToCopy={content.web.metaTitle} />
+                </div>
                 <p className="p-2 bg-gray-900 rounded font-mono text-sm mb-4">{content.web.metaTitle}</p>
-                <h4 className="font-bold text-gray-400">Meta Description:</h4>
-                <p className="p-2 bg-gray-900 rounded font-mono text-sm mb-6">{content.web.metaDescription}</p>
+                
+                <div className="flex justify-between items-center mb-1">
+                    <h4 className="font-bold text-gray-400 flex items-center">
+                        Meta Description:
+                        <span className={`text-xs font-semibold ml-2 ${metaDescriptionCharCountClass}`}>
+                            ({metaDescriptionLength}/160 characters)
+                        </span>
+                    </h4>
+                    <CopyButton textToCopy={content.web.metaDescription} />
+                </div>
+                <p className="p-2 bg-gray-900 rounded font-mono text-sm mb-4">{content.web.metaDescription}</p>
+
+                <div className="flex justify-between items-center mb-1">
+                    <h4 className="font-bold text-gray-400">Focus Keyword:</h4>
+                    <CopyButton textToCopy={content.web.focusKeyword} />
+                </div>
+                <p className="p-2 bg-gray-900 rounded font-mono text-sm mb-6">{content.web.focusKeyword}</p>
+
                 <hr className="border-gray-600 my-6" />
 
                 <div className="flex items-center gap-2 mb-4">
@@ -232,46 +273,73 @@ export const ContentTabs: React.FC<ContentTabsProps> = ({ content, topic, langua
                 
                 {webContentView === 'text' ? (
                     <div className="animate-fade-in">
-                        <h4 className="font-bold text-gray-400 mb-2">Body:</h4>
+                        <div className="flex justify-between items-center mb-2">
+                            <h4 className="font-bold text-gray-400">Body:</h4>
+                            <CopyButton textToCopy={content.web.body} />
+                        </div>
                         <div dangerouslySetInnerHTML={{ __html: content.web.body.replace(/\n/g, '<br />') }} />
                     </div>
                 ) : (
                     <div className="animate-fade-in">
-                         <h4 className="font-bold text-gray-400 mb-2">HTML Body:</h4>
+                         <div className="flex justify-between items-center mb-2">
+                            <h4 className="font-bold text-gray-400">HTML Body:</h4>
+                            <CopyButton textToCopy={content.web.htmlBody} />
+                        </div>
                         <pre className="whitespace-pre-wrap font-mono text-sm bg-gray-900 p-4 rounded-lg overflow-x-auto">
                             <code>{content.web.htmlBody}</code>
                         </pre>
                     </div>
                 )}
+                {!isReadOnly && editorFor('web')}
             </ContentCard>
         );
       }
       case 'facebook':
         if (!content.facebook) return null;
         return (
-            <ContentCard title="Facebook Post" copyText={content.facebook.postText} editor={editorFor('facebook')} isReadOnly={isReadOnly}>
+            <ContentCard title="Facebook Post" copyText={content.facebook.postText}>
+                <div className="flex justify-between items-center mb-2">
+                    <h4 className="font-bold text-gray-400">Post Text:</h4>
+                    <CopyButton textToCopy={content.facebook.postText} />
+                </div>
                 <pre className="whitespace-pre-wrap font-sans bg-gray-900 p-4 rounded-lg">{content.facebook.postText}</pre>
+                {!isReadOnly && editorFor('facebook')}
             </ContentCard>
         );
       case 'linkedin':
         if (!content.linkedin) return null;
         return (
-            <ContentCard title="LinkedIn Post" copyText={content.linkedin.postText} editor={editorFor('linkedin')} isReadOnly={isReadOnly}>
+            <ContentCard title="LinkedIn Post" copyText={content.linkedin.postText}>
+                <div className="flex justify-between items-center mb-2">
+                    <h4 className="font-bold text-gray-400">Post Text:</h4>
+                    <CopyButton textToCopy={content.linkedin.postText} />
+                </div>
                 <pre className="whitespace-pre-wrap font-sans bg-gray-900 p-4 rounded-lg">{content.linkedin.postText}</pre>
+                {!isReadOnly && editorFor('linkedin')}
             </ContentCard>
         );
       case 'x':
         if (!content.x) return null;
         return (
-            <ContentCard title="X (Twitter) Post" copyText={content.x.postText} editor={editorFor('x')} isReadOnly={isReadOnly}>
+            <ContentCard title="X (Twitter) Post" copyText={content.x.postText}>
+                <div className="flex justify-between items-center mb-2">
+                    <h4 className="font-bold text-gray-400">Post Text:</h4>
+                    <CopyButton textToCopy={content.x.postText} />
+                </div>
                 <pre className="whitespace-pre-wrap font-sans bg-gray-900 p-4 rounded-lg">{content.x.postText}</pre>
+                {!isReadOnly && editorFor('x')}
             </ContentCard>
         );
       case 'tiktok':
         if (!content.tiktok) return null;
         return (
-            <ContentCard title="TikTok / Shorts Script" copyText={content.tiktok.script} editor={editorFor('tiktok')} isReadOnly={isReadOnly}>
+            <ContentCard title="TikTok / Shorts Script" copyText={content.tiktok.script}>
+                <div className="flex justify-between items-center mb-2">
+                    <h4 className="font-bold text-gray-400">Script:</h4>
+                    <CopyButton textToCopy={content.tiktok.script} />
+                </div>
                 <pre className="whitespace-pre-wrap font-sans bg-gray-900 p-4 rounded-lg">{content.tiktok.script}</pre>
+                {!isReadOnly && editorFor('tiktok')}
             </ContentCard>
         );
       case 'youtube':
@@ -280,13 +348,18 @@ export const ContentTabs: React.FC<ContentTabsProps> = ({ content, topic, langua
             <ContentCard 
                 title="YouTube Content"
                 copyText={`Title: ${content.youtube.title}\n\nDescription:\n${content.youtube.description}`}
-                editor={editorFor('youtube')}
-                isReadOnly={isReadOnly}
             >
-                 <h4 className="font-bold text-gray-400">Video Title:</h4>
+                <div className="flex justify-between items-center mb-1">
+                    <h4 className="font-bold text-gray-400">Video Title:</h4>
+                    <CopyButton textToCopy={content.youtube.title} />
+                </div>
                 <p className="p-2 bg-gray-900 rounded font-mono text-sm mb-6">{content.youtube.title}</p>
-                <h4 className="font-bold text-gray-400">Video Description:</h4>
+                <div className="flex justify-between items-center mb-1">
+                    <h4 className="font-bold text-gray-400">Video Description:</h4>
+                    <CopyButton textToCopy={content.youtube.description} />
+                </div>
                 <pre className="whitespace-pre-wrap font-sans bg-gray-900 p-4 rounded-lg">{content.youtube.description}</pre>
+                {!isReadOnly && editorFor('youtube')}
             </ContentCard>
         );
       default:

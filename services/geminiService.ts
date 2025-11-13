@@ -14,9 +14,10 @@ const allPlatformProperties = {
       metaTitle: { type: Type.STRING, description: "An SEO-optimized meta title (50-60 characters)." },
       metaDescription: { type: Type.STRING, description: "An SEO-optimized meta description (150-160 characters)." },
       body: { type: Type.STRING, description: "The main article body, optimized for web reading with clear headings and structure, formatted as plain text with markdown-style line breaks." },
-      htmlBody: { type: Type.STRING, description: "A clean, semantic HTML version of the article body. Use tags like <h2>, <h3>, <p>, <strong>, <em>, <ul>, and <li>. This is for direct pasting into a CMS like Blogger or WordPress." }
+      htmlBody: { type: Type.STRING, description: "A clean, semantic HTML version of the article body. Use tags like <h2>, <h3>, <p>, <strong>, <em>, <ul>, and <li>. This is for direct pasting into a CMS like Blogger or WordPress." },
+      focusKeyword: { type: Type.STRING, description: "The single most important keyword or phrase (2-4 words) that the content should rank for." }
     },
-    required: ["metaTitle", "metaDescription", "body", "htmlBody"],
+    required: ["metaTitle", "metaDescription", "body", "htmlBody", "focusKeyword"],
   },
   facebook: {
     type: Type.OBJECT,
@@ -250,7 +251,7 @@ export const regeneratePlatformContent = async (
                 responseSchema = { type: Type.OBJECT, properties: { title: { type: Type.STRING }, description: { type: Type.STRING } }, required: ["title", "description"] };
                 break;
             case 'web':
-                 responseSchema = { type: Type.OBJECT, properties: { metaTitle: { type: Type.STRING }, metaDescription: { type: Type.STRING }, body: { type: Type.STRING }, htmlBody: { type: Type.STRING } }, required: ["metaTitle", "metaDescription", "body", "htmlBody"] };
+                 responseSchema = { type: Type.OBJECT, properties: { metaTitle: { type: Type.STRING }, metaDescription: { type: Type.STRING }, body: { type: Type.STRING }, htmlBody: { type: Type.STRING }, focusKeyword: { type: Type.STRING } }, required: ["metaTitle", "metaDescription", "body", "htmlBody", "focusKeyword"] };
                 break;
             default:
                 throw new Error(`Unsupported platform for regeneration: ${platform}`);

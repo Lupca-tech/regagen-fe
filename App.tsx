@@ -1,4 +1,5 @@
 
+
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 
 // Import services and types
@@ -8,7 +9,6 @@ import type { EditablePlatform, GeneratedContent, BrandVoiceProfile, View } from
 // Import components
 import { Header } from './components/Header';
 import { TopicForm } from './components/TopicForm';
-import { LoadingDisplay } from './components/LoadingDisplay';
 import { ContentTabs } from './components/ContentTabs';
 import { ProjectsDashboard } from './components/ProjectsDashboard';
 import { BrandVoiceDashboard } from './components/BrandVoiceDashboard';
@@ -63,8 +63,8 @@ const MainApp: React.FC = () => {
     const [generatedContent, setGeneratedContent] = useState<GeneratedContent | null>(null);
     const contentRef = useRef<HTMLDivElement>(null);
     
-    const { startGeneration, activeGenerations, cancelGeneration } = useGeneration();
-    const mainGenerationTask = activeGenerations.find(g => g.context.view === 'creator');
+    const { startGeneration, activeGenerations } = useGeneration();
+    const mainGenerationTask = activeGenerations.find(g => g.context.view === 'creator' && g.context.type === 'content');
 
 
     useEffect(() => {
@@ -105,7 +105,7 @@ const MainApp: React.FC = () => {
                     selectedPlatforms,
                     brandVoiceProfile,
                 },
-                onSuccess: (result) => {
+                onSuccess: (result: GeneratedContent) => {
                     setGeneratedContent(result);
                     setTimeout(() => {
                         contentRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -116,6 +116,16 @@ const MainApp: React.FC = () => {
         
     }, [topic, language, shouldGenerateImage, selectedPlatforms, startGeneration]);
     
+    const handleContentUpdate = useCallback((platform: EditablePlatform, newContent: any) => {
+      setGeneratedContent(prevContent => {
+        if (!prevContent) return null;
+        return {
+          ...prevContent,
+          [platform]: newContent,
+        };
+      });
+    }, []);
+
     const isDashboardView = ['projects', 'brandVoice', 'account'].includes(view);
     const dashboardTitles: Record<string, string> = {
         projects: 'Content Dashboard',
@@ -171,26 +181,13 @@ const MainApp: React.FC = () => {
                     </section>
 
                     <div ref={contentRef} className="my-10 min-h-[100px]">
-                        {mainGenerationTask && (
-                            <LoadingDisplay 
-                                message={mainGenerationTask.message} 
-                                progress={mainGenerationTask.progress} 
-                                onCancel={() => cancelGeneration(mainGenerationTask.id)} 
-                            />
-                        )}
-                        {mainGenerationTask?.status === 'error' && (
-                            <div className="mt-8 flex flex-col items-center justify-center p-6 bg-red-900/20 border border-red-500/50 rounded-xl text-red-300">
-                               <h3 className="text-lg font-bold">Error</h3>
-                               <p className="mt-2 text-center">{mainGenerationTask.message}</p>
-                            </div>
-                        )}
                         {generatedContent && !mainGenerationTask && (
                            <div className="animate-fade-in">
                              <ContentTabs 
                                 content={generatedContent} 
                                 topic={topic}
                                 language={language}
-                                onContentUpdate={() => {}}
+                                onContentUpdate={handleContentUpdate}
                               />
                            </div>
                         )}

@@ -1,8 +1,8 @@
 
 import React, { createContext, useContext, useState, useCallback, useEffect, useRef } from 'react';
-import { generateContentFlow, generateTopicsAI } from '../services/geminiService';
+import { generateContentFlow, generateTopicsAI, regeneratePlatformContent } from '../services/geminiService';
 import { saveGeneratedContent, addMultipleTopics } from '../services/firebaseService';
-import type { GeneratedContent, Topic, BrandVoiceProfile } from '../types';
+import type { GeneratedContent, Topic, BrandVoiceProfile, EditablePlatform } from '../types';
 
 export interface GenerationTask {
     id: string;
@@ -10,11 +10,27 @@ export interface GenerationTask {
     status: 'queued' | 'running' | 'success' | 'error';
     progress: number;
     message: string;
+    generatedResult?: any; // To store the actual generated content/topics
     context: {
-        type: 'content' | 'topics';
+        type: 'content' | 'topics' | 'refineContent';
         view: 'creator' | 'dashboard';
-        params: any;
-        onSuccess?: (result?: any) => void;
+        params: {
+            topic: string | Topic; // Can be string for creator, or Topic object for dashboard
+            language?: string;
+            shouldGenerateImage?: boolean;
+            selectedPlatforms?: Set<EditablePlatform>;
+            brandVoiceProfile?: Omit<BrandVoiceProfile, 'id' | 'userId' | 'createdAt' | 'name'>;
+            userId?: string; // For dashboard view
+            project?: any; // For topics generation
+            campaign?: any; // For topics generation
+            count?: number; // For topics generation
+            
+            // For refineContent tasks
+            platform?: EditablePlatform;
+            currentContent?: any;
+            userPrompt?: string;
+        };
+        onSuccess?: (result?: any, platform?: EditablePlatform) => void;
     };
 }
 
@@ -68,35 +84,53 @@ export const GenerationProvider: React.FC<{ children: React.ReactNode }> = ({ ch
             if (cancelledTaskIds.current.has(task.id)) return;
             
             let result: any;
+            let generatedContentResult: GeneratedContent | string[] | any; // Unified variable for generated result
+
             if (task.context.type === 'topics') {
                 const { project, campaign, count, userId } = task.context.params;
                 onProgress(20, 'Brainstorming ideas...');
-                const generatedTopics = await generateTopicsAI(project, campaign, count);
+                const generatedTopics = await generateTopicsAI(project!, campaign!, count!);
                 if (cancelledTaskIds.current.has(task.id)) return;
 
                 onProgress(80, 'Saving new topics...');
                 const topicsToAdd = generatedTopics.map(name => ({ name }));
-                await addMultipleTopics(topicsToAdd, userId, project.id, campaign.id);
+                await addMultipleTopics(topicsToAdd, userId!, project!.id, campaign!.id);
+                generatedContentResult = generatedTopics;
 
-            } else { // 'content' generation
+            } else if (task.context.type === 'content') { // Main content generation
                 const { topic, language, shouldGenerateImage, selectedPlatforms, brandVoiceProfile } = task.context.params;
-                const topicName = task.context.view === 'dashboard' ? topic.name : topic;
-                result = await generateContentFlow(topicName, language, shouldGenerateImage, selectedPlatforms, onProgress, brandVoiceProfile);
+                const topicName = task.context.view === 'dashboard' ? (topic as Topic).name : (topic as string);
+                result = await generateContentFlow(topicName, language!, shouldGenerateImage!, selectedPlatforms!, onProgress, brandVoiceProfile);
                 
                 if (cancelledTaskIds.current.has(task.id)) return;
 
                 if (task.context.view === 'dashboard') {
                      const { topic: topicObject, userId } = task.context.params;
                      onProgress(98, "Saving to database...");
-                     const generationContext = { projectId: topicObject.projectId, campaignId: topicObject.campaignId, topicId: topicObject.id };
-                     await saveGeneratedContent(userId, topicObject.name, language, result, generationContext);
+                     const generationContext = { projectId: (topicObject as Topic).projectId, campaignId: (topicObject as Topic).campaignId, topicId: (topicObject as Topic).id };
+                     await saveGeneratedContent(userId!, (topicObject as Topic).name, language!, result, generationContext);
                 }
+                generatedContentResult = result;
+
+            } else if (task.context.type === 'refineContent') { // Platform specific refinement
+                const { platform, topic, language, currentContent, userPrompt } = task.context.params;
+                onProgress(20, `Refining ${platform} content...`);
+                result = await regeneratePlatformContent(platform!, topic as string, currentContent!, userPrompt!, language!);
+                if (cancelledTaskIds.current.has(task.id)) return;
+                generatedContentResult = result;
             }
 
             if (cancelledTaskIds.current.has(task.id)) return;
 
-            updateTask(task.id, { status: 'success', progress: 100, message: 'Completed!' });
-            task.context.onSuccess?.(result);
+            updateTask(task.id, { status: 'success', progress: 100, message: 'Completed!', generatedResult: generatedContentResult });
+            
+            // Call onSuccess with result and platform for refineContent tasks
+            if (task.context.type === 'refineContent' && task.context.params.platform) {
+                task.context.onSuccess?.(generatedContentResult, task.context.params.platform);
+            } else {
+                task.context.onSuccess?.(generatedContentResult);
+            }
+            
             removeTask(task.id);
 
         } catch (e: any) {
@@ -132,6 +166,7 @@ export const GenerationProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         setTasks(prevTasks => prevTasks.filter(task => task.id !== taskId));
     }, []);
 
+    // Active task is the one currently running, or the first queued, or the first in list if any are complete/error
     const activeTask = tasks.find(t => t.status === 'running') || tasks.find(t => t.status === 'queued') || tasks[0] || null;
 
     return (

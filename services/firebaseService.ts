@@ -11,6 +11,8 @@ import {
   updateProfile,
   sendPasswordResetEmail,
   deleteUser,
+  setPersistence, // Added setPersistence
+  indexedDBLocalPersistence, // Added indexedDBLocalPersistence
   type User,
   type Auth
 } from 'firebase/auth';
@@ -58,6 +60,17 @@ const firebaseConfig = {
 // Initialize Firebase
 const app: FirebaseApp = initializeApp(firebaseConfig);
 const auth: Auth = getAuth(app);
+
+// Set Firebase Auth persistence to IndexedDB to prevent "missing initial state" errors
+// with cross-origin authentication flows (e.g., app on Vercel, auth on firebaseapp.com)
+setPersistence(auth, indexedDBLocalPersistence)
+  .then(() => {
+    console.log("Firebase Auth persistence set to indexedDBLocalPersistence.");
+  })
+  .catch((error) => {
+    console.error("Failed to set Firebase Auth persistence:", error);
+  });
+
 const db: Firestore = getFirestore(app);
 const storage: Storage = getStorage(app);
 

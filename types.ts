@@ -1,4 +1,3 @@
-
 export type View = 'creator' | 'projects' | 'brandVoice' | 'account';
 
 export type EditablePlatform = 'web' | 'facebook' | 'linkedin' | 'x' | 'tiktok' | 'youtube';
@@ -17,6 +16,7 @@ export interface GeneratedContent {
     metaDescription: string;
     body: string;
     htmlBody: string;
+    focusKeyword: string; // Added focusKeyword
   };
   facebook?: {
     postText: string;

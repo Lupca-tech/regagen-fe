@@ -58,7 +58,7 @@ const TopicItem: React.FC<{ topic: Topic; isSelected: boolean; onSelect: () => v
                 <span className={`font-medium truncate ${isSelected ? 'text-pink-300' : 'text-zinc-200'}`}>{topic.name}</span>
                 <span className={`px-2 py-0.5 text-xs font-semibold rounded-full flex-shrink-0 ${topic.status === 'Generated' ? 'bg-green-500/10 text-green-400' : 'bg-zinc-700 text-zinc-300'}`}>{topic.status}</span>
             </button>
-            <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+            <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1 transition-opacity opacity-100">
                 {(topic.status === 'Draft' || existingTask) && (
                     <button onClick={handleGenerateClick} className="p-1.5 text-zinc-400 hover:text-pink-400 hover:bg-pink-500/10 rounded-md">
                         <SparkleIcon className={`w-4 h-4 ${existingTask ? 'animate-pulse text-pink-400' : ''}`} />
