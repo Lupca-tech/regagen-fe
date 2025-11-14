@@ -1,10 +1,6 @@
-
-
-
-
 import React, { createContext, useContext, useState, useCallback, useEffect, useRef } from 'react';
 import { generateContentFlow, generateTopicsAI, regeneratePlatformContent, analyzePerformance, generateCalendarSuggestions } from '../services/geminiService';
-import { saveGeneratedContent, addMultipleTopics, updateContentAnalysis, addCalendarEventsBatch } from '../services/firebaseService';
+import { saveGeneratedContent, addMultipleTopics, updateContentAnalysis, addCalendarEventsBatch, linkContentToCalendarEvent } from '../services/firebaseService';
 import type { GeneratedContent, Topic, BrandVoiceProfile, EditablePlatform, Project, Campaign, SavedContent, CalendarSettings } from '../types';
 import type { User } from 'firebase/auth';
 
@@ -49,6 +45,7 @@ export interface GenerationTask {
             // For calendarSuggestions tasks
             calendarSettings?: CalendarSettings;
             currentDate?: Date;
+            sourceCalendarEventId?: string;
         };
         onSuccess?: (result?: any, platform?: EditablePlatform) => void;
         onError?: (error: Error) => void;
@@ -163,7 +160,7 @@ export const GenerationProvider: React.FC<{ children: React.ReactNode }> = ({ ch
                     let result;
                     // --- Content Generation (main article, social posts, image) ---
                     if (nextQueuedTask.context.type === 'content') {
-                        const { topic, language, shouldGenerateImage, selectedPlatforms, generationContext } = nextQueuedTask.context.params;
+                        const { topic, language, shouldGenerateImage, selectedPlatforms, generationContext, userId, project, campaign, sourceCalendarEventId } = nextQueuedTask.context.params;
                         
                         if (!topic) {
                            throw new Error("Missing 'topic' for content generation task.");
@@ -172,7 +169,6 @@ export const GenerationProvider: React.FC<{ children: React.ReactNode }> = ({ ch
                         // Ensure topic is a string for the Gemini service call
                         const topicNameString = typeof topic === 'string' ? topic : (topic as Topic).name;
                         
-                        // Fix: Pass the unified 'generationContext' object to the generation flow.
                         result = await generateContentFlow(
                             topicNameString,
                             language || 'English', // Default language if not provided
@@ -182,18 +178,18 @@ export const GenerationProvider: React.FC<{ children: React.ReactNode }> = ({ ch
                             generationContext,
                         );
 
-                        // Save generated content to Firebase if it's from the dashboard view
-                        if (nextQueuedTask.context.view === 'dashboard' && nextQueuedTask.context.params.userId) {
-                            const { userId, project, campaign } = nextQueuedTask.context.params;
-                            const topicObj = topic as Topic; // Assume it's a Topic object for dashboard view
-                            if (userId && topicObj.id && project?.id && campaign?.id) {
-                                await saveGeneratedContent(userId, topicObj.name, language || 'English', result, {
-                                    projectId: project.id,
-                                    campaignId: campaign.id,
-                                    topicId: topicObj.id,
-                                });
-                            } else {
-                                console.warn("Missing necessary IDs for saving content from dashboard view.");
+                        // Save generated content if context is available (from dashboard or magic creator)
+                        if (userId && topic && typeof topic !== 'string' && topic.id && project?.id && campaign?.id) {
+                            const topicObj = topic as Topic;
+                            const contentId = await saveGeneratedContent(userId, topicObj.name, language || 'English', result, {
+                                projectId: project.id,
+                                campaignId: campaign.id,
+                                topicId: topicObj.id,
+                            });
+
+                            // Link back to calendar event if source ID is present
+                            if (sourceCalendarEventId && contentId) {
+                                await linkContentToCalendarEvent(sourceCalendarEventId, contentId);
                             }
                         }
                     } 

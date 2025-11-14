@@ -1,5 +1,3 @@
-
-
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 
 // Import services and types
@@ -56,6 +54,7 @@ const MainApp: React.FC = () => {
     const [view, setView] = useState<View>('magicCreator');
     const [topic, setTopic] = useState(''); // This might be deprecated or used differently
     const [prefillTopic, setPrefillTopic] = useState<string | undefined>(undefined);
+    const [sourceCalendarEventId, setSourceCalendarEventId] = useState<string | undefined>();
     
     useScrollAnimation(view); // Pass the current view to the hook
 
@@ -84,8 +83,12 @@ const MainApp: React.FC = () => {
             if (context?.prefillTopic) {
                 setPrefillTopic(context.prefillTopic);
             }
+            if (context?.sourceCalendarEventId) {
+                setSourceCalendarEventId(context.sourceCalendarEventId);
+            }
         } else {
             setPrefillTopic(undefined); // Clear prefill when navigating away from magic creator
+            setSourceCalendarEventId(undefined); // Clear calendar event source
         }
         
         setView(newView);
@@ -153,6 +156,7 @@ const MainApp: React.FC = () => {
                                 onOpenAuthModal={() => setIsAuthModalOpen(true)}
                                 onGenerationComplete={(context) => handleNavigate('projects', context)}
                                 prefillTopic={prefillTopic}
+                                sourceCalendarEventId={sourceCalendarEventId}
                            />
                         </div>
                     </section>

@@ -286,7 +286,7 @@ export const CalendarDashboard: React.FC<CalendarDashboardProps> = ({ user, onNa
     };
 
     const handleCreateContent = (event: CalendarEvent) => {
-        onNavigate('magicCreator', { prefillTopic: event.title });
+        onNavigate('magicCreator', { prefillTopic: event.title, sourceCalendarEventId: event.id });
     };
 
     const changeMonth = (delta: number) => {

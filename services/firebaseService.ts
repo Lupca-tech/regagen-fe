@@ -190,6 +190,17 @@ const handleFirestoreError = (error: unknown, context: string): Error => {
     return new Error(`An unexpected error occurred while fetching ${context}.`);
 }
 
+const handleFirestoreCreateError = (error: unknown, context: string, collectionPath: string): Error => {
+    console.error(`Error creating ${context}:`, error);
+    const firebaseError = error as FirebaseError;
+    if (firebaseError.code === 'permission-denied') {
+        const detailedError = `Permission Denied: Could not create a new ${context}.\n\nThis is a common issue with Firestore Security Rules. For a 'create' operation, your rule must check the incoming data ('request.resource.data') not the existing data ('resource.data').\n\nPlease use a rule similar to this in your Firebase Console -> Firestore -> Rules:\n\nmatch /${collectionPath}/{documentId} {\n  allow create: if request.auth.uid == request.resource.data.userId;\n  // ... add other rules for read, update, delete\n}`;
+        return new Error(detailedError);
+    }
+    // Fallback to the generic handler for other types of errors
+    return handleFirestoreError(error, `creating ${context}`);
+};
+
 // PROJECTS
 export const getProjects = async (userId: string): Promise<Project[]> => {
     try {
@@ -200,7 +211,13 @@ export const getProjects = async (userId: string): Promise<Project[]> => {
         throw handleFirestoreError(error, 'projects');
     }
 }
-export const addProject = (data: Omit<Project, 'id' | 'createdAt'>) => addDoc(collection(db, "projects"), { ...data, createdAt: serverTimestamp() });
+export const addProject = async (data: Omit<Project, 'id' | 'createdAt'>) => {
+    try {
+        return await addDoc(collection(db, "projects"), { ...data, createdAt: serverTimestamp() });
+    } catch (error) {
+        throw handleFirestoreCreateError(error, 'project', 'projects');
+    }
+};
 export const updateProject = (id: string, data: Partial<Project>) => updateDoc(doc(db, "projects", id), data);
 export const deleteProject = async (id: string, userId: string) => {
     const batch = writeBatch(db);
@@ -235,7 +252,13 @@ export const getAllUserCampaigns = async (userId: string): Promise<Campaign[]> =
         throw handleFirestoreError(error, 'all user campaigns');
     }
 }
-export const addCampaign = (data: Omit<Campaign, 'id' | 'createdAt'>) => addDoc(collection(db, "campaigns"), { ...data, createdAt: serverTimestamp() });
+export const addCampaign = async (data: Omit<Campaign, 'id' | 'createdAt'>) => {
+    try {
+        return await addDoc(collection(db, "campaigns"), { ...data, createdAt: serverTimestamp() });
+    } catch (error) {
+        throw handleFirestoreCreateError(error, 'campaign', 'campaigns');
+    }
+};
 export const updateCampaign = (id: string, data: Partial<Campaign>) => updateDoc(doc(db, "campaigns", id), data);
 export const deleteCampaign = async (id: string, userId: string) => {
     const batch = writeBatch(db);
@@ -270,7 +293,13 @@ export const getAllUserTopics = async (userId: string): Promise<Topic[]> => {
         throw handleFirestoreError(error, 'all user topics');
     }
 }
-export const addTopic = (data: Omit<Topic, 'id' | 'createdAt' | 'status'>) => addDoc(collection(db, "topics"), { ...data, status: 'Draft', createdAt: serverTimestamp() });
+export const addTopic = async (data: Omit<Topic, 'id' | 'createdAt' | 'status'>) => {
+    try {
+        return await addDoc(collection(db, "topics"), { ...data, status: 'Draft', createdAt: serverTimestamp() });
+    } catch (error) {
+        throw handleFirestoreCreateError(error, 'topic', 'topics');
+    }
+};
 export const updateTopic = (id: string, data: Partial<Topic>) => updateDoc(doc(db, "topics", id), data);
 export const deleteTopic = async (id: string, userId: string) => {
     const batch = writeBatch(db);
@@ -293,39 +322,50 @@ export const addMultipleTopics = async (topics: {name: string}[], userId: string
             createdAt: serverTimestamp()
         });
     });
-    await batch.commit();
+    try {
+        await batch.commit();
+    } catch (error) {
+        throw handleFirestoreCreateError(error, 'topics', 'topics');
+    }
 }
 
 
 // CONTENT (GENERATIONS)
-export const saveGeneratedContent = async (userId: string, topicText: string, language: string, content: GeneratedContent, context: { projectId: string; campaignId: string; topicId: string; }) => {
+export const saveGeneratedContent = async (userId: string, topicText: string, language: string, content: GeneratedContent, context: { projectId: string; campaignId: string; topicId: string; }): Promise<string> => {
     const docRef = doc(collection(db, "generations"));
     const { mainArticle, image, web, facebook, linkedin, x, tiktok, youtube, analysis } = content;
 
-    await setDoc(docRef, {
-        // Required fields from content
-        mainArticle,
-        image,
-        // Optional fields from content, defaulting to null to avoid 'undefined' errors
-        web: web || null,
-        facebook: facebook || null,
-        linkedin: linkedin || null,
-        x: x || null,
-        tiktok: tiktok || null,
-        youtube: youtube || null,
-        analysis: analysis || null,
-        // Metadata fields
-        id: docRef.id,
-        userId,
-        topic: topicText,
-        language,
-        projectId: context.projectId,
-        campaignId: context.campaignId,
-        topicId: context.topicId,
-        createdAt: serverTimestamp()
-    });
-    
-    await updateDoc(doc(db, "topics", context.topicId), { status: 'Generated', contentId: docRef.id });
+    try {
+        await setDoc(docRef, {
+            // Required fields from content
+            mainArticle,
+            image,
+            // Optional fields from content, defaulting to null to avoid 'undefined' errors
+            web: web || null,
+            facebook: facebook || null,
+            linkedin: linkedin || null,
+            x: x || null,
+            tiktok: tiktok || null,
+            youtube: youtube || null,
+            analysis: analysis || null,
+            // Metadata fields
+            id: docRef.id,
+            userId,
+            topic: topicText,
+            language,
+            projectId: context.projectId,
+            campaignId: context.campaignId,
+            topicId: context.topicId,
+            createdAt: serverTimestamp()
+        });
+        
+        await updateDoc(doc(db, "topics", context.topicId), { status: 'Generated', contentId: docRef.id });
+        return docRef.id;
+    } catch (error) {
+        // We can't easily distinguish between setDoc and updateDoc failure here,
+        // but the 'create' permission is the most common for new content.
+        throw handleFirestoreCreateError(error, 'content generation', 'generations');
+    }
 }
 export const getContentById = async (contentId: string): Promise<SavedContent | null> => {
     try {
@@ -363,7 +403,13 @@ export const getBrandVoiceProfiles = async (userId: string): Promise<BrandVoiceP
         throw handleFirestoreError(error, 'brand voice profiles');
     }
 }
-export const addBrandVoiceProfile = (data: Omit<BrandVoiceProfile, 'id' | 'createdAt'>) => addDoc(collection(db, "brandVoiceProfiles"), { ...data, createdAt: serverTimestamp() });
+export const addBrandVoiceProfile = async (data: Omit<BrandVoiceProfile, 'id' | 'createdAt'>) => {
+    try {
+        return await addDoc(collection(db, "brandVoiceProfiles"), { ...data, createdAt: serverTimestamp() });
+    } catch (error) {
+        throw handleFirestoreCreateError(error, 'brand voice profile', 'brandVoiceProfiles');
+    }
+};
 export const updateBrandVoiceProfile = (id: string, data: Partial<BrandVoiceProfile>) => updateDoc(doc(db, "brandVoiceProfiles", id), data);
 export const deleteBrandVoiceProfile = (id: string) => deleteDoc(doc(db, "brandVoiceProfiles", id));
 
@@ -446,6 +492,13 @@ export const updateCalendarEvent = (eventId: string, data: Partial<CalendarEvent
 
 export const deleteCalendarEvent = (eventId: string) => deleteDoc(doc(db, "calendarEvents", eventId));
 
+export const linkContentToCalendarEvent = (eventId: string, contentId:string) => {
+    const docRef = doc(db, "calendarEvents", eventId);
+    return updateDoc(docRef, {
+        status: 'draft',
+        contentId: contentId,
+    });
+};
 
 
 // ACCOUNT MANAGEMENT

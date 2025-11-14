@@ -12,6 +12,7 @@ interface MagicCreatorDashboardProps {
     onOpenAuthModal: () => void;
     onGenerationComplete: (context: { projectId: string; campaignId: string; topicId: string }) => void;
     prefillTopic?: string;
+    sourceCalendarEventId?: string;
 }
 
 type GenerationStep = {
@@ -240,7 +241,7 @@ const AdvancedOptions: React.FC<any> = React.memo(({ showAdvanced, ...props }) =
 ));
 
 // --- MAIN COMPONENT ---
-export const MagicCreatorDashboard: React.FC<MagicCreatorDashboardProps> = ({ user, onOpenAuthModal, onGenerationComplete, prefillTopic }) => {
+export const MagicCreatorDashboard: React.FC<MagicCreatorDashboardProps> = ({ user, onOpenAuthModal, onGenerationComplete, prefillTopic, sourceCalendarEventId }) => {
     // --- STATE MANAGEMENT ---
     const [viewState, setViewState] = useState<ViewState>('input');
     const [userInput, setUserInput] = useState('');
@@ -271,6 +272,7 @@ export const MagicCreatorDashboard: React.FC<MagicCreatorDashboardProps> = ({ us
     useEffect(() => {
         if (prefillTopic) {
             setUserInput(prefillTopic);
+            setScaffold(prev => ({...prev, topicName: prefillTopic}));
         }
     }, [prefillTopic]);
 
@@ -289,7 +291,7 @@ export const MagicCreatorDashboard: React.FC<MagicCreatorDashboardProps> = ({ us
     }, [user]);
     
     useEffect(() => {
-        if (debouncedUserInput.trim().length < 10) {
+        if (debouncedUserInput.trim().length < 10 || prefillTopic) { // Don't auto-analyze if topic is pre-filled
             analysisControllerRef.current?.abort();
             setIsAnalyzing(false);
             return;
@@ -318,7 +320,7 @@ export const MagicCreatorDashboard: React.FC<MagicCreatorDashboardProps> = ({ us
         return () => {
             controller.abort();
         };
-    }, [debouncedUserInput]);
+    }, [debouncedUserInput, prefillTopic]);
 
 
     const filteredCampaigns = useMemo(() => {
@@ -428,6 +430,7 @@ export const MagicCreatorDashboard: React.FC<MagicCreatorDashboardProps> = ({ us
                         userId: user.uid, language, shouldGenerateImage, selectedPlatforms,
                         generationContext: { user, projects, campaigns, brandVoiceProfile: selectedProfile },
                         project: { id: finalProjectId }, campaign: { id: finalCampaignId },
+                        sourceCalendarEventId,
                     },
                     onSuccess: (result) => {
                         updateStepStatus('content', 'complete');
@@ -441,7 +444,7 @@ export const MagicCreatorDashboard: React.FC<MagicCreatorDashboardProps> = ({ us
             const failedStep = generationSteps.find(s => s.status === 'running')?.key || 'setup';
             updateStepStatus(failedStep, 'error', e.message || "An unexpected error occurred.");
         }
-    }, [user, userInput, scaffold, selectedProjectId, selectedCampaignId, language, shouldGenerateImage, selectedPlatforms, selectedProfileId, projects, campaigns, brandVoices, onOpenAuthModal, startGeneration]);
+    }, [user, userInput, scaffold, selectedProjectId, selectedCampaignId, language, shouldGenerateImage, selectedPlatforms, selectedProfileId, projects, campaigns, brandVoices, onOpenAuthModal, startGeneration, sourceCalendarEventId]);
 
     // --- RENDER LOGIC ---
 
