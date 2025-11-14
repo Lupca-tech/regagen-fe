@@ -224,7 +224,7 @@ export const analyzePerformance = async (
 
     try {
         const response = await ai.models.generateContent({
-            model: "gemini-2.5-pro",
+            model: "gemini-flash-latest",
             contents: contentToAnalyze,
             config: {
                 systemInstruction,
@@ -333,7 +333,7 @@ export const generateContentFlow = async (
     
     onProgress(10, "Analyzing trends...");
     const response = await ai.models.generateContent({
-      model: "gemini-2.5-pro",
+      model: "gemini-flash-latest",
       contents: `Generate a full content package for the topic: "${topic}"`,
       config: {
         systemInstruction,
@@ -457,7 +457,7 @@ export const regeneratePlatformContent = async (
         }
 
         const response = await ai.models.generateContent({
-            model: "gemini-2.5-pro",
+            model: "gemini-flash-latest",
             contents: prompt,
             config: {
                 systemInstruction,
@@ -505,7 +505,7 @@ export const analyzeBrandVoice = async (samples: string): Promise<Omit<BrandVoic
         const systemInstruction = `You are an expert brand strategist and linguistic analyst. Your task is to analyze the provided text samples and create a concise, actionable 'Style Profile' that captures the essence of the writing voice. Focus on tone, vocabulary, sentence complexity, and recurring patterns. Extract specific rules for what to DO and what NOT TO DO to replicate this voice. The output MUST be in the provided JSON schema.`;
 
         const response = await ai.models.generateContent({
-            model: "gemini-2.5-pro",
+            model: "gemini-flash-latest",
             contents: `Analyze the following text samples and generate a style profile:\n\n---\n\n${samples}`,
             config: {
                 systemInstruction,
@@ -561,7 +561,7 @@ export const generateTopicsAI = async (
         `;
 
         const response = await ai.models.generateContent({
-            model: "gemini-2.5-pro",
+            model: "gemini-flash-latest",
             contents: prompt,
             config: {
                 systemInstruction,
@@ -607,7 +607,7 @@ export const analyzeInputForScaffolding = async (
         const systemInstruction = `You are an expert content strategist. Your task is to analyze a user's input (which could be a simple topic, a full article, or a prompt) and extract a logical hierarchy for it. Based on the input, suggest a concise and relevant Project Name, Campaign Name, and Topic Name. The output must be a clean JSON object that adheres to the provided schema. Do not include any other text.`;
         
         const response = await ai.models.generateContent({
-            model: "gemini-2.5-flash",
+            model: "gemini-flash-latest",
             contents: `Analyze the following input and generate a project, campaign, and topic name structure:\n\n---\n\n${userInput}`,
             config: {
                 systemInstruction,
@@ -648,7 +648,7 @@ export const generateCalendarSuggestions = async (
         const prompt = `Generate 5 content suggestions for ${monthName} ${year}.`;
 
         const response = await ai.models.generateContent({
-            model: "gemini-2.5-pro",
+            model: "gemini-flash-latest",
             contents: prompt,
             config: {
                 systemInstruction,
