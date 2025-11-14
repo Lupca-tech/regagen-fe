@@ -54,10 +54,10 @@ export interface GeneratedContent {
     title: string;
     body: string;
   };
-  image: {
+  images: {
     url: string;
     prompt: string;
-  };
+  }[];
   web?: {
     metaTitle: string;
     metaDescription: string;

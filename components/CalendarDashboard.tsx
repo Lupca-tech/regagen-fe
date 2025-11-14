@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { User, getCalendarSettings, saveCalendarSettings, getCalendarEvents, updateCalendarEvent, deleteCalendarEvent, addCalendarEventsBatch } from '../services/firebaseService';
 import { CalendarSettings, CalendarEvent, View } from '../types';
 import { useGeneration } from '../contexts/GenerationContext';
-import { BackIcon, SparkleIcon, CheckCircleIcon, XCircleIcon, SettingsIcon } from './Icons';
+import { BackIcon, SparkleIcon, CheckCircleIcon, XCircleIcon, SettingsIcon, WebIcon, ChevronDownIcon } from './Icons';
 
 // --- PROPS ---
 interface CalendarDashboardProps {
@@ -53,13 +53,16 @@ const SettingsModal: React.FC<{
     );
 };
 
-const EventModal: React.FC<{ 
+interface EventModalProps { 
     event: CalendarEvent; 
     onClose: () => void; 
     onSave: (event: CalendarEvent, data: Partial<CalendarEvent>) => void; 
     onDelete: (event: CalendarEvent) => void;
     onCreateContent: (event: CalendarEvent) => void; 
-}> = ({ event, onClose, onSave, onDelete, onCreateContent }) => {
+    onViewContent: (contentId: string) => void; // New prop for viewing content
+}
+
+const EventModal: React.FC<EventModalProps> = ({ event, onClose, onSave, onDelete, onCreateContent, onViewContent }) => {
     const [title, setTitle] = useState(event.title);
     const [status, setStatus] = useState(event.status);
     const isSuggestion = event.status.startsWith('suggested');
@@ -87,6 +90,11 @@ const EventModal: React.FC<{
                     {isSuggestion && (
                          <button onClick={() => onCreateContent(event)} className="w-full flex items-center justify-center gap-2 px-4 py-2 font-semibold text-white bg-gradient-to-r from-purple-500 to-pink-600 rounded-lg">
                             <SparkleIcon/> Create Content from this Idea
+                        </button>
+                    )}
+                    {event.contentId && ( // Conditionally render if contentId exists
+                        <button onClick={() => onViewContent(event.contentId!)} className="w-full flex items-center justify-center gap-2 px-4 py-2 font-semibold text-pink-300 bg-pink-900/30 border border-pink-500/50 rounded-lg hover:bg-pink-900/50">
+                            <WebIcon/> View Generated Content
                         </button>
                     )}
                 </div>
@@ -129,6 +137,16 @@ const DeleteConfirmationModal: React.FC<{
 );
 
 
+const getEventPillStyle = (status: CalendarEvent['status']) => {
+    switch (status) {
+        case 'suggested_trend': return 'bg-blue-900/50 text-blue-300 border-blue-500/30 hover:bg-blue-900/80';
+        case 'suggested_event': return 'bg-purple-900/50 text-purple-300 border-purple-500/30 hover:bg-purple-900/80';
+        case 'draft': return 'bg-zinc-700/50 text-zinc-300 border-zinc-500/30 hover:bg-zinc-700/80';
+        case 'published': return 'bg-green-900/50 text-green-300 border-green-500/30 hover:bg-green-900/80';
+        default: return 'bg-zinc-800';
+    }
+};
+
 // --- MAIN COMPONENT ---
 export const CalendarDashboard: React.FC<CalendarDashboardProps> = ({ user, onNavigate }) => {
     const [settings, setSettings] = useState<CalendarSettings | null>(null);
@@ -144,6 +162,8 @@ export const CalendarDashboard: React.FC<CalendarDashboardProps> = ({ user, onNa
     const [generationSuccess, setGenerationSuccess] = useState(false);
     const [newEventIds, setNewEventIds] = useState<Set<string>>(new Set());
     const existingEventIdsRef = useRef<Set<string>>(new Set());
+    const [isMonthOverviewVisible, setIsMonthOverviewVisible] = useState(false);
+
 
     const { startGeneration, activeGenerations } = useGeneration();
     const generationTask = activeGenerations.find(g => g.context.type === 'calendarSuggestions');
@@ -289,6 +309,11 @@ export const CalendarDashboard: React.FC<CalendarDashboardProps> = ({ user, onNa
         onNavigate('magicCreator', { prefillTopic: event.title, sourceCalendarEventId: event.id });
     };
 
+    const handleViewContent = (contentId: string) => {
+        onNavigate('projects', { contentId });
+        setSelectedEvent(null); // Close the event modal
+    };
+
     const changeMonth = (delta: number) => {
         setCurrentDate(prev => {
             const newDate = new Date(prev);
@@ -297,7 +322,7 @@ export const CalendarDashboard: React.FC<CalendarDashboardProps> = ({ user, onNa
         });
     };
 
-    const { monthGrid, daysOfWeek } = useMemo(() => {
+    const { monthGrid, daysOfWeek, eventsByDay, allDaysInMonth } = useMemo(() => {
         const year = currentDate.getFullYear();
         const month = currentDate.getMonth();
         const firstDayOfMonth = new Date(year, month, 1).getDay();
@@ -305,26 +330,29 @@ export const CalendarDashboard: React.FC<CalendarDashboardProps> = ({ user, onNa
         
         const daysOfWeek = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
         const monthGrid: (Date | null)[] = [];
+        const allDaysInMonth: Date[] = [];
 
         for (let i = 0; i < firstDayOfMonth; i++) {
             monthGrid.push(null);
         }
         for (let i = 1; i <= daysInMonth; i++) {
-            monthGrid.push(new Date(year, month, i));
+            const day = new Date(year, month, i);
+            monthGrid.push(day);
+            allDaysInMonth.push(day);
         }
+        
+        const eventsByDay = events.reduce((acc, event) => {
+            const eventDate = new Date(event.start).toDateString();
+            if (!acc[eventDate]) {
+                acc[eventDate] = [];
+            }
+            acc[eventDate].push(event);
+            return acc;
+        }, {} as Record<string, CalendarEvent[]>);
 
-        return { monthGrid, daysOfWeek };
-    }, [currentDate]);
 
-    const getEventPillStyle = (status: CalendarEvent['status']) => {
-        switch (status) {
-            case 'suggested_trend': return 'bg-blue-900/50 text-blue-300 border-blue-500/30';
-            case 'suggested_event': return 'bg-purple-900/50 text-purple-300 border-purple-500/30';
-            case 'draft': return 'bg-zinc-700/50 text-zinc-300 border-zinc-500/30';
-            case 'published': return 'bg-green-900/50 text-green-300 border-green-500/30';
-            default: return 'bg-zinc-800';
-        }
-    };
+        return { monthGrid, daysOfWeek, eventsByDay, allDaysInMonth };
+    }, [currentDate, events]);
     
     if (loading.settings) {
         return <div className="p-6 text-center text-zinc-400">Loading calendar settings...</div>
@@ -340,7 +368,7 @@ export const CalendarDashboard: React.FC<CalendarDashboardProps> = ({ user, onNa
     }
 
     return (
-        <div className="bg-zinc-950/50 p-6 rounded-xl border border-zinc-800 animate-fade-in-fast">
+        <div className="bg-zinc-950/50 p-4 md:p-6 rounded-xl border border-zinc-800 animate-fade-in-fast">
             {error && (
                 <div className="bg-red-900/20 border border-red-500/50 rounded-lg p-4 mb-6 text-red-300 animate-fade-in flex justify-between items-center">
                     <div className="flex-grow">
@@ -350,13 +378,13 @@ export const CalendarDashboard: React.FC<CalendarDashboardProps> = ({ user, onNa
                     <button onClick={() => setError(null)} className="text-xl font-bold hover:text-white transition-colors flex-shrink-0 ml-4">&times;</button>
                 </div>
             )}
-            {selectedEvent && <EventModal event={selectedEvent} onClose={() => setSelectedEvent(null)} onSave={handleEventSave} onDelete={handleEventDelete} onCreateContent={handleCreateContent} />}
+            {selectedEvent && <EventModal event={selectedEvent} onClose={() => setSelectedEvent(null)} onSave={handleEventSave} onDelete={handleEventDelete} onCreateContent={handleCreateContent} onViewContent={handleViewContent} />}
             {eventToDelete && <DeleteConfirmationModal event={eventToDelete} onClose={() => setEventToDelete(null)} onConfirm={handleConfirmDelete} isDeleting={isDeleting} />}
 
             <div className="flex flex-col md:flex-row justify-between md:items-center mb-6 gap-4">
-                <div className="flex items-center gap-4">
+                <div className="flex items-center gap-2 md:gap-4">
                     <button onClick={() => changeMonth(-1)} className="p-2 rounded-md hover:bg-zinc-800"><BackIcon className="transform rotate-0" /></button>
-                    <h2 className="text-2xl font-bold w-48 text-center">{currentDate.toLocaleString('default', { month: 'long', year: 'numeric' })}</h2>
+                    <h2 className="text-xl md:text-2xl font-bold w-40 md:w-48 text-center">{currentDate.toLocaleString('default', { month: 'long', year: 'numeric' })}</h2>
                     <button onClick={() => changeMonth(1)} className="p-2 rounded-md hover:bg-zinc-800"><BackIcon className="transform rotate-180" /></button>
                 </div>
                 <div className="flex items-center gap-2 self-end md:self-center">
@@ -381,17 +409,64 @@ export const CalendarDashboard: React.FC<CalendarDashboardProps> = ({ user, onNa
                     </div>
                 </div>
             </div>
+
+            {/* --- MOBILE VIEW --- */}
+            <div className="block md:hidden">
+                <button onClick={() => setIsMonthOverviewVisible(!isMonthOverviewVisible)} className="w-full flex justify-between items-center p-2 mb-4 bg-zinc-800/50 rounded-md">
+                    <span className="text-sm font-semibold">View Month Overview</span>
+                    <ChevronDownIcon className={`w-5 h-5 transition-transform ${isMonthOverviewVisible ? 'rotate-180' : ''}`} />
+                </button>
+                <div className={`collapsible-content ${isMonthOverviewVisible ? 'visible' : ''}`}>
+                    <div className="grid grid-cols-7 gap-1 text-center mb-4">
+                         {daysOfWeek.map(day => <div key={day} className="text-xs font-bold text-zinc-500">{day.charAt(0)}</div>)}
+                         {monthGrid.map((day, index) => (
+                             <div key={index} className={`w-full aspect-square flex items-center justify-center text-xs rounded-full ${day && eventsByDay[day.toDateString()] ? 'bg-pink-500/30 text-white' : ''} ${day ? '' : 'opacity-0'}`}>
+                                 {day?.getDate()}
+                             </div>
+                         ))}
+                    </div>
+                </div>
+                 <div className="space-y-4 max-h-[60vh] overflow-y-auto pr-2">
+                    {loading.events ? <p className="text-zinc-500">Loading events...</p> : allDaysInMonth.map(day => {
+                        const dayKey = day.toDateString();
+                        const dayEvents = eventsByDay[dayKey] || [];
+                        return (
+                            <div key={dayKey}>
+                                <h3 className="font-bold text-zinc-400 mb-2">{day.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}</h3>
+                                {dayEvents.length > 0 ? (
+                                    <div className="space-y-2 border-l-2 border-zinc-800 pl-4">
+                                        {dayEvents.map(event => (
+                                            <button key={event.id} onClick={() => setSelectedEvent(event)} className={`w-full text-left p-3 rounded-lg border transition-colors ${getEventPillStyle(event.status)} ${newEventIds.has(event.id) ? 'pulse-glow' : ''}`}>
+                                                <div className="flex justify-between items-start gap-2">
+                                                    <p className="font-semibold">{event.title}</p>
+                                                    <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-black/20 flex-shrink-0 capitalize">
+                                                        {event.status.replace(/_/g, ' ')}
+                                                    </span>
+                                                </div>
+                                                {event.contentId && <WebIcon className="w-4 h-4 text-zinc-400 mt-2" />}
+                                            </button>
+                                        ))}
+                                    </div>
+                                ) : (
+                                    <p className="text-sm text-zinc-600 border-l-2 border-zinc-800 pl-4 py-2">No events scheduled.</p>
+                                )}
+                            </div>
+                        )
+                    })}
+                </div>
+            </div>
             
-            <div className="grid grid-cols-7 gap-1">
+            {/* --- DESKTOP VIEW --- */}
+            <div className="hidden md:grid grid-cols-7 gap-1">
                 {daysOfWeek.map(day => <div key={day} className="text-center font-bold text-zinc-400 text-sm py-2">{day}</div>)}
                 {monthGrid.map((day, index) => {
-                    const dayEvents = day ? events.filter(e => new Date(e.start).toDateString() === day.toDateString()) : [];
+                    const dayEvents = day ? eventsByDay[day.toDateString()] : [];
                     return (
                         <div key={index} className={`h-32 bg-zinc-900/50 rounded-md p-1 border border-zinc-800/50 overflow-y-auto ${day ? '' : 'opacity-50'}`}>
                             {day && <span className="text-xs font-bold ml-1">{day.getDate()}</span>}
                             <div className="space-y-1 mt-1">
-                                {dayEvents.map(event => (
-                                     <button key={event.id} onClick={() => setSelectedEvent(event)} className={`w-full text-left p-1.5 text-xs rounded-md border ${getEventPillStyle(event.status)} ${newEventIds.has(event.id) ? 'pulse-glow' : ''}`}>
+                                {dayEvents && dayEvents.map(event => (
+                                     <button key={event.id} onClick={() => setSelectedEvent(event)} className={`w-full text-left p-1.5 text-xs rounded-md border transition-colors ${getEventPillStyle(event.status)} ${newEventIds.has(event.id) ? 'pulse-glow' : ''}`}>
                                         <p className="font-semibold truncate">{event.title}</p>
                                     </button>
                                 ))}

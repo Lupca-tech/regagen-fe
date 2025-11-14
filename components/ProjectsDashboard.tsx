@@ -1,8 +1,6 @@
-
-
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { User, getProjects, addProject, updateProject, deleteProject, getCampaigns, addCampaign, updateCampaign, deleteCampaign, getTopics, addTopic, updateTopic, deleteTopic, getContentById, getBrandVoiceProfiles } from '../services/firebaseService';
-import { Project, Campaign, Topic, SavedContent, BrandVoiceProfile, View, EditablePlatform, PerformanceAnalysis } from '../types';
+import { User, getProjects, addProject, updateProject, deleteProject, getCampaigns, addCampaign, updateCampaign, deleteCampaign, getTopics, addTopic, updateTopic, deleteTopic, getContentById, getBrandVoiceProfiles, getAllUserCampaigns, getAllUserTopics, formatFirestoreTimestamp } from '../services/firebaseService';
+import { Project, Campaign, Topic, SavedContent, BrandVoiceProfile, View, EditablePlatform, PerformanceAnalysis, FirestoreTimestamp } from '../types';
 import { ContentTabs } from './ContentTabs';
 import { useGeneration } from '../contexts/GenerationContext';
 import { SearchIcon, BoardViewIcon, ListViewIcon, BackIcon, SkeletonItem } from './Icons';
@@ -18,6 +16,7 @@ import { ProjectListView } from './projects/ProjectListView';
 interface ProjectsDashboardProps {
     user: User;
     onNavigate: (view: View) => void;
+    contentIdToView?: string; // New prop to view specific content
 }
 
 // --- TYPES ---
@@ -34,8 +33,13 @@ type ProjectViewMode = 'board' | 'list';
 export type CampaignWithTopics = Campaign & { topics: Topic[] };
 export type ProjectWithCampaigns = Project & { campaigns: CampaignWithTopics[] };
 
+// Augmented types for display in board view
+export type ProjectWithCounts = Project & { campaignCount: number; formattedCreatedAt: string; };
+export type CampaignWithCounts = Campaign & { topicCount: number; formattedCreatedAt: string; };
+
+
 // --- MAIN COMPONENT ---
-export const ProjectsDashboard: React.FC<ProjectsDashboardProps> = ({ user, onNavigate }) => {
+export const ProjectsDashboard: React.FC<ProjectsDashboardProps> = ({ user, onNavigate, contentIdToView }) => {
     // State
     const [projectViewMode, setProjectViewMode] = useState<ProjectViewMode>('board');
     const [searchQuery, setSearchQuery] = useState('');
@@ -44,6 +48,11 @@ export const ProjectsDashboard: React.FC<ProjectsDashboardProps> = ({ user, onNa
     const [projects, setProjects] = useState<Project[]>([]);
     const [campaigns, setCampaigns] = useState<Campaign[]>([]);
     const [topics, setTopics] = useState<Topic[]>([]);
+
+    // All-user data for counting
+    const [allUserCampaigns, setAllUserCampaigns] = useState<Campaign[]>([]);
+    const [allUserTopics, setAllUserTopics] = useState<Topic[]>([]);
+
     const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
     const [selectedCampaignId, setSelectedCampaignId] = useState<string | null>(selectedProjectId ? null : null); // Reset on project change
     
@@ -54,7 +63,10 @@ export const ProjectsDashboard: React.FC<ProjectsDashboardProps> = ({ user, onNa
     // Shared state
     const [activeTopic, setActiveTopic] = useState<Topic | null>(null);
     const [viewedContent, setViewedContent] = useState<SavedContent | null>(null);
-    const [loading, setLoading] = useState({ projects: true, campaigns: false, topics: false, content: false });
+    const [loading, setLoading] = useState({ 
+        projects: true, campaigns: false, topics: false, content: false, 
+        allCampaigns: true, allTopics: true 
+    });
     const [error, setError] = useState<string | null>(null);
     const [modal, setModal] = useState<ModalState>({ isOpen: false, type: null, mode: 'add', data: null });
     const [deleteModal, setDeleteModal] = useState<{ isOpen: boolean; type: ModalType | null; item: Project | Campaign | Topic | null }>({ isOpen: false, type: null, item: null });
@@ -71,6 +83,9 @@ export const ProjectsDashboard: React.FC<ProjectsDashboardProps> = ({ user, onNa
     const [hasBrandVoiceProfiles, setHasBrandVoiceProfiles] = useState(true);
     const [isCtaDismissed, setIsCtaDismissed] = useState(localStorage.getItem('brandVoiceCtaDismissed') === 'true');
     
+    // State to track if content has been preloaded from URL/prop
+    const [hasPreloadedContent, setHasPreloadedContent] = useState(false);
+
     useEffect(() => {
         getBrandVoiceProfiles(user.uid)
             .then(profiles => setHasBrandVoiceProfiles(profiles.length > 0))
@@ -83,6 +98,23 @@ export const ProjectsDashboard: React.FC<ProjectsDashboardProps> = ({ user, onNa
     }, []);
     
     // --- DATA FETCHING ---
+    const fetchAllBaseData = useCallback(async () => {
+        setLoading(prev => ({ ...prev, allCampaigns: true, allTopics: true }));
+        setError(null);
+        try {
+            const [campaignsData, topicsData] = await Promise.all([
+                getAllUserCampaigns(user.uid),
+                getAllUserTopics(user.uid)
+            ]);
+            setAllUserCampaigns(campaignsData);
+            setAllUserTopics(topicsData);
+        } catch (e: any) {
+            setError(e.message || "Failed to load all campaigns or topics.");
+        } finally {
+            setLoading(prev => ({ ...prev, allCampaigns: false, allTopics: false }));
+        }
+    }, [user.uid]);
+
     const fetchProjects = useCallback(async () => {
         setLoading(prev => ({ ...prev, projects: true }));
         setError(null);
@@ -143,18 +175,17 @@ export const ProjectsDashboard: React.FC<ProjectsDashboardProps> = ({ user, onNa
         setError(null);
         try {
             const projects = await getProjects(user.uid);
-            const projectsWithData: ProjectWithCampaigns[] = await Promise.all(
-                projects.map(async (project) => {
-                    const campaigns = await getCampaigns(project.id, user.uid);
-                    const campaignsWithTopics: CampaignWithTopics[] = await Promise.all(
-                        campaigns.map(async (campaign) => {
-                            const topics = await getTopics(campaign.id, user.uid);
-                            return { ...campaign, topics };
-                        })
-                    );
-                    return { ...project, campaigns: campaignsWithTopics };
-                })
-            );
+            const campaigns = await getAllUserCampaigns(user.uid); // Fetch all campaigns
+            const topics = await getAllUserTopics(user.uid);       // Fetch all topics
+
+            const projectsWithData: ProjectWithCampaigns[] = projects.map((project) => {
+                const projectCampaigns = campaigns.filter(c => c.projectId === project.id);
+                const campaignsWithTopics: CampaignWithTopics[] = projectCampaigns.map((campaign) => {
+                    const campaignTopics = topics.filter(t => t.campaignId === campaign.id);
+                    return { ...campaign, topics: campaignTopics };
+                });
+                return { ...project, campaigns: campaignsWithTopics };
+            });
             setListData(projectsWithData);
         } catch (e: any) {
             setError(e.message || "Failed to load data for list view.");
@@ -162,6 +193,47 @@ export const ProjectsDashboard: React.FC<ProjectsDashboardProps> = ({ user, onNa
             setIsListLoading(false);
         }
     }, [user.uid]);
+
+    useEffect(() => {
+        if (contentIdToView && !hasPreloadedContent && !loading.content) {
+            setLoading(prev => ({ ...prev, content: true }));
+            setError(null);
+            getContentById(contentIdToView)
+                .then(content => {
+                    if (content) {
+                        // Create a dummy topic object from the content for activeTopic state
+                        setActiveTopic({
+                            id: content.topicId,
+                            name: content.topic,
+                            campaignId: content.campaignId,
+                            projectId: content.projectId,
+                            status: 'Generated', // Assuming preloaded content is generated
+                            userId: content.userId,
+                            createdAt: content.createdAt, 
+                            contentId: content.id,
+                        });
+                        setViewedContent(content);
+                        setHasPreloadedContent(true); // Mark as preloaded
+                    } else {
+                        throw new Error("Content not found for ID: " + contentIdToView);
+                    }
+                })
+                .catch((e: any) => setError(e.message || "Could not load the specified content."))
+                .finally(() => setLoading(prev => ({ ...prev, content: false })));
+        }
+    }, [contentIdToView, hasPreloadedContent, loading.content, user.uid]);
+
+    // Reset preloaded state if the user navigates away from the specific content view
+    useEffect(() => {
+        if (activeTopic === null && viewedContent === null && hasPreloadedContent) {
+            setHasPreloadedContent(false);
+        }
+    }, [activeTopic, viewedContent, hasPreloadedContent]);
+
+    // Fetch all user campaigns and topics once on mount
+    useEffect(() => {
+        fetchAllBaseData();
+    }, [fetchAllBaseData]);
 
     useEffect(() => {
         if (projectViewMode === 'board') {
@@ -195,6 +267,26 @@ export const ProjectsDashboard: React.FC<ProjectsDashboardProps> = ({ user, onNa
         }
     }, [selectedCampaignId, projectViewMode, fetchTopics]);
     
+    // Memoized data for ProjectBoardView to include counts and formatted dates
+    const memoizedProjectsForBoard: ProjectWithCounts[] = useMemo(() => {
+        if (loading.projects || loading.allCampaigns) return [];
+        return projects.map(p => ({
+            ...p,
+            campaignCount: allUserCampaigns.filter(c => c.projectId === p.id).length,
+            formattedCreatedAt: formatFirestoreTimestamp(p.createdAt),
+        }));
+    }, [projects, allUserCampaigns, loading.projects, loading.allCampaigns]);
+
+    const memoizedCampaignsForBoard: CampaignWithCounts[] = useMemo(() => {
+        if (loading.campaigns || loading.allTopics || !selectedProjectId) return [];
+        return campaigns.map(c => ({
+            ...c,
+            topicCount: allUserTopics.filter(t => t.campaignId === c.id).length,
+            formattedCreatedAt: formatFirestoreTimestamp(c.createdAt),
+        }));
+    }, [campaigns, allUserTopics, selectedProjectId, loading.campaigns, loading.allTopics]);
+
+
     const filteredListData = useMemo(() => {
         if (!searchQuery) return listData;
         const lowercasedQuery = searchQuery.toLowerCase();
@@ -328,9 +420,11 @@ export const ProjectsDashboard: React.FC<ProjectsDashboardProps> = ({ user, onNa
                  }
             }
             
+            // Refetch all relevant data
             if (projectViewMode === 'list') {
                 await fetchAllDataForList();
             } else {
+                 await fetchAllBaseData(); // Important to update counts
                  await fetchProjects();
                  if(selectedProjectId) await fetchCampaigns(selectedProjectId); // Re-fetch only current selection
                  if(selectedCampaignId) await fetchTopics(selectedCampaignId); // Re-fetch only current selection
@@ -340,7 +434,7 @@ export const ProjectsDashboard: React.FC<ProjectsDashboardProps> = ({ user, onNa
         }
         
         setModal({ isOpen: false, type: null, mode: 'add', data: null });
-    }, [modal, user.uid, selectedProjectId, selectedCampaignId, projects, campaigns, projectViewMode, fetchProjects, fetchCampaigns, fetchTopics, fetchAllDataForList]);
+    }, [modal, user.uid, selectedProjectId, selectedCampaignId, projects, campaigns, projectViewMode, fetchProjects, fetchCampaigns, fetchTopics, fetchAllBaseData, fetchAllDataForList]);
     
     const handleDelete = useCallback((type: ModalType, item: Project | Campaign | Topic) => {
         setDeleteModal({ isOpen: true, type, item });
@@ -363,7 +457,8 @@ export const ProjectsDashboard: React.FC<ProjectsDashboardProps> = ({ user, onNa
             if (projectViewMode === 'list') {
                 await fetchAllDataForList();
             } else {
-                // Re-fetch only the necessary data based on deletion context
+                // Re-fetch all base data and then the specific view
+                await fetchAllBaseData(); 
                 if (type === 'project') {
                     if (selectedProjectId === item.id) handleBackToProjects(); // Nav back if deleted item was selected
                     await fetchProjects();
@@ -381,7 +476,7 @@ export const ProjectsDashboard: React.FC<ProjectsDashboardProps> = ({ user, onNa
             setIsDeleting(false);
             setDeleteModal({ isOpen: false, type: null, item: null });
         }
-    }, [deleteModal, user.uid, activeTopic, projectViewMode, selectedProjectId, selectedCampaignId, handleBackToProjects, handleBackToCampaigns, handleBackToDashboard, fetchProjects, fetchCampaigns, fetchTopics, fetchAllDataForList]);
+    }, [deleteModal, user.uid, activeTopic, projectViewMode, selectedProjectId, selectedCampaignId, handleBackToProjects, handleBackToCampaigns, handleBackToDashboard, fetchProjects, fetchCampaigns, fetchTopics, fetchAllBaseData, fetchAllDataForList]);
     
     const handleGenerationSuccess = useCallback(() => {
         if (projectViewMode === 'list') {
@@ -456,9 +551,9 @@ export const ProjectsDashboard: React.FC<ProjectsDashboardProps> = ({ user, onNa
                 </div>
                 {projectViewMode === 'board' ? (
                     <ProjectBoardView
-                        projects={projects}
-                        campaigns={campaigns}
-                        topics={topics}
+                        projects={memoizedProjectsForBoard} // Use augmented projects
+                        campaigns={memoizedCampaignsForBoard} // Use augmented campaigns
+                        topics={topics} // Raw topics
                         loading={loading}
                         selectedProjectId={selectedProjectId}
                         selectedCampaignId={selectedCampaignId}

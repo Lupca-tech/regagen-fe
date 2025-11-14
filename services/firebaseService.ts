@@ -330,40 +330,91 @@ export const addMultipleTopics = async (topics: {name: string}[], userId: string
 }
 
 
+/**
+ * Uploads an image to Firebase Storage if it's a data URL, otherwise returns the URL as is.
+ * @param userId The user's ID.
+ * @param contentId The ID of the content document this image belongs to.
+ * @param imageIndex The index of the image in the content's image array.
+ * @param imageUrl The image URL, which can be a data URL (base64) or a regular http/https URL.
+ * @returns The publicly accessible download URL from Firebase Storage or the original http/https URL.
+ */
+const uploadImageToStorage = async (userId: string, contentId: string, imageIndex: number, imageUrl: string): Promise<string> => {
+    if (!imageUrl || !imageUrl.startsWith('data:image/')) {
+        // If it's not a data URL (e.g., the picsum.photos fallback), return it directly.
+        return imageUrl;
+    }
+
+    try {
+        // Create a reference in Firebase Storage
+        const storageRef = ref(storage, `images/${userId}/${contentId}/${Date.now()}_${imageIndex}.png`);
+        
+        // Upload the base64 data URL string
+        const snapshot = await uploadString(storageRef, imageUrl, 'data_url');
+        
+        // Get the public download URL
+        const downloadURL = await getDownloadURL(snapshot.ref);
+        
+        return downloadURL;
+    } catch (error) {
+        console.error("Error uploading image to Firebase Storage:", error);
+        // If upload fails, fall back to a default placeholder. This provides a second layer of fallback.
+        return `https://picsum.photos/seed/${contentId}/${imageIndex}/1024/768`;
+    }
+};
+
+
 // CONTENT (GENERATIONS)
 export const saveGeneratedContent = async (userId: string, topicText: string, language: string, content: GeneratedContent, context: { projectId: string; campaignId: string; topicId: string; }): Promise<string> => {
     const docRef = doc(collection(db, "generations"));
-    const { mainArticle, image, web, facebook, linkedin, x, tiktok, youtube, analysis } = content;
+    const contentId = docRef.id;
+
+    // Process and upload images to Firebase Storage
+    const uploadedImages = [];
+    if (Array.isArray(content.images) && content.images.length > 0) {
+        // Use Promise.all to upload images in parallel for better performance
+        const uploadPromises = content.images.map((img, index) => 
+            uploadImageToStorage(userId, contentId, index, img.url)
+        );
+        const finalUrls = await Promise.all(uploadPromises);
+
+        for (let i = 0; i < finalUrls.length; i++) {
+            uploadedImages.push({
+                url: finalUrls[i],
+                prompt: content.images[i].prompt || 'No prompt provided.'
+            });
+        }
+    }
+
+    // Explicitly create a clean object for Firestore to prevent "invalid nested entity" errors
+    const dataToSave = {
+        mainArticle: {
+            title: content.mainArticle?.title || '',
+            body: content.mainArticle?.body || ''
+        },
+        images: uploadedImages, // Use the new array with storage URLs
+        web: content.web || null,
+        facebook: content.facebook || null,
+        linkedin: content.linkedin || null,
+        x: content.x || null,
+        tiktok: content.tiktok || null,
+        youtube: content.youtube || null,
+        analysis: content.analysis || null,
+        id: contentId,
+        userId,
+        topic: topicText,
+        language,
+        projectId: context.projectId,
+        campaignId: context.campaignId,
+        topicId: context.topicId,
+        createdAt: serverTimestamp()
+    };
 
     try {
-        await setDoc(docRef, {
-            // Required fields from content
-            mainArticle,
-            image,
-            // Optional fields from content, defaulting to null to avoid 'undefined' errors
-            web: web || null,
-            facebook: facebook || null,
-            linkedin: linkedin || null,
-            x: x || null,
-            tiktok: tiktok || null,
-            youtube: youtube || null,
-            analysis: analysis || null,
-            // Metadata fields
-            id: docRef.id,
-            userId,
-            topic: topicText,
-            language,
-            projectId: context.projectId,
-            campaignId: context.campaignId,
-            topicId: context.topicId,
-            createdAt: serverTimestamp()
-        });
+        await setDoc(docRef, dataToSave);
         
-        await updateDoc(doc(db, "topics", context.topicId), { status: 'Generated', contentId: docRef.id });
-        return docRef.id;
+        await updateDoc(doc(db, "topics", context.topicId), { status: 'Generated', contentId: contentId });
+        return contentId;
     } catch (error) {
-        // We can't easily distinguish between setDoc and updateDoc failure here,
-        // but the 'create' permission is the most common for new content.
         throw handleFirestoreCreateError(error, 'content generation', 'generations');
     }
 }
@@ -531,3 +582,10 @@ export const deleteUserAccount = async (userId: string) => {
 };
 
 export type { User };
+
+// Utility to format Firestore Timestamp
+export const formatFirestoreTimestamp = (timestamp: Timestamp | { seconds: number; nanoseconds: number }): string => {
+    if (!timestamp) return 'N/A';
+    const date = (timestamp instanceof Timestamp) ? timestamp.toDate() : new Date(timestamp.seconds * 1000);
+    return date.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+};

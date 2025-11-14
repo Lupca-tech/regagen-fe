@@ -55,7 +55,8 @@ const MainApp: React.FC = () => {
     const [topic, setTopic] = useState(''); // This might be deprecated or used differently
     const [prefillTopic, setPrefillTopic] = useState<string | undefined>(undefined);
     const [sourceCalendarEventId, setSourceCalendarEventId] = useState<string | undefined>();
-    
+    const [contentIdToView, setContentIdToView] = useState<string | undefined>(undefined); // New state for contentId
+
     useScrollAnimation(view); // Pass the current view to the hook
 
     // Legacy states from old creator, might be removed or repurposed
@@ -78,6 +79,7 @@ const MainApp: React.FC = () => {
     
     const handleNavigate = useCallback((newView: View, context?: any) => {
         setGeneratedContent(null);
+        setContentIdToView(undefined); // Clear existing contentIdToView when navigating
         if (newView === 'magicCreator') {
             setTopic('');
             if (context?.prefillTopic) {
@@ -85,6 +87,10 @@ const MainApp: React.FC = () => {
             }
             if (context?.sourceCalendarEventId) {
                 setSourceCalendarEventId(context.sourceCalendarEventId);
+            }
+        } else if (newView === 'projects') {
+            if (context?.contentId) {
+                setContentIdToView(context.contentId);
             }
         } else {
             setPrefillTopic(undefined); // Clear prefill when navigating away from magic creator
@@ -118,7 +124,7 @@ const MainApp: React.FC = () => {
         if (!currentUser) return null;
         switch (view) {
             case 'projects':
-                return <ProjectsDashboard user={currentUser} onNavigate={handleNavigate} />;
+                return <ProjectsDashboard user={currentUser} onNavigate={handleNavigate} contentIdToView={contentIdToView} />;
             case 'brandVoice':
                 return <BrandVoiceDashboard user={currentUser} />;
             case 'account':
@@ -178,7 +184,7 @@ const MainApp: React.FC = () => {
                     <NeonDivider />
 
                     <section className="py-20">
-                        <h2 className="text-4xl md:text-5xl font-black text-center uppercase scroll-animate">HOW IT WORKS</h2>
+                        <h2 className="text-4xl md::text-5xl font-black text-center uppercase scroll-animate">HOW IT WORKS</h2>
                         <div className="mt-16 grid grid-cols-1 md:grid-cols-3 gap-12 text-center">
                             <div className="scroll-animate">
                                 <TrendIcon className="h-12 w-12 mx-auto text-pink-500" />

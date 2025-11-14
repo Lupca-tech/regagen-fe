@@ -6,7 +6,7 @@ import { useGeneration } from '../contexts/GenerationContext';
 import { MagicWandIcon, WebIcon, FacebookIcon, LinkedInIcon, XIcon, TikTokIcon, YouTubeIcon, SparkleIcon, CheckCircleIcon, ChevronDownIcon, ProjectsIcon, RocketIcon, XCircleIcon } from './Icons';
 import { ContentTabs } from './ContentTabs';
 
-// --- PROPS & TYPES ---
+// --- PROPS ---
 interface MagicCreatorDashboardProps {
     user: User | null;
     onOpenAuthModal: () => void;
@@ -233,7 +233,7 @@ const AdvancedOptions: React.FC<any> = React.memo(({ showAdvanced, ...props }) =
                         <div className={`block w-12 h-6 rounded-full transition-colors ${props.shouldGenerateImage ? 'bg-pink-600' : 'bg-zinc-700'}`}></div>
                         <div className={`dot absolute left-1 top-1 bg-white w-4 h-4 rounded-full transition-transform ${props.shouldGenerateImage ? 'translate-x-6' : ''}`}></div>
                     </div>
-                    <span className="ml-3 text-sm text-zinc-300">Generate Cover Image</span>
+                    <span className="ml-3 text-sm text-zinc-300">Generate Visual Assets</span>
                 </label>
             </div>
         </div>
@@ -270,11 +270,11 @@ export const MagicCreatorDashboard: React.FC<MagicCreatorDashboardProps> = ({ us
 
     // --- DATA FETCHING & ANALYSIS ---
     useEffect(() => {
-        if (prefillTopic) {
+        if (prefillTopic && userInput === '') { 
             setUserInput(prefillTopic);
-            setScaffold(prev => ({...prev, topicName: prefillTopic}));
+            // The analysis useEffect below will pick this up via `prefillTopic` dependency
         }
-    }, [prefillTopic]);
+    }, [prefillTopic, userInput]);
 
     useEffect(() => {
         if (user) {
@@ -291,7 +291,9 @@ export const MagicCreatorDashboard: React.FC<MagicCreatorDashboardProps> = ({ us
     }, [user]);
     
     useEffect(() => {
-        if (debouncedUserInput.trim().length < 10 || prefillTopic) { // Don't auto-analyze if topic is pre-filled
+        const inputForAnalysis = prefillTopic || debouncedUserInput;
+
+        if (!inputForAnalysis.trim() || inputForAnalysis.trim().length < 10) {
             analysisControllerRef.current?.abort();
             setIsAnalyzing(false);
             return;
@@ -304,7 +306,7 @@ export const MagicCreatorDashboard: React.FC<MagicCreatorDashboardProps> = ({ us
         setIsAnalyzing(true);
         setError(null);
 
-        analyzeInputForScaffolding(debouncedUserInput, controller.signal)
+        analyzeInputForScaffolding(inputForAnalysis, controller.signal)
             .then(result => {
                 setScaffold(result);
                 setIsAnalyzing(false);
@@ -320,22 +322,32 @@ export const MagicCreatorDashboard: React.FC<MagicCreatorDashboardProps> = ({ us
         return () => {
             controller.abort();
         };
-    }, [debouncedUserInput, prefillTopic]);
+    }, [prefillTopic, debouncedUserInput]);
 
 
+    // Fix: Refactored useMemo to remove circular dependency.
     const filteredCampaigns = useMemo(() => {
         if (selectedProjectId === '__CREATE_NEW__') {
+            return [];
+        }
+        return campaigns.filter(c => c.projectId === selectedProjectId);
+    }, [campaigns, selectedProjectId]); 
+
+    // Fix: Added useEffect to handle resetting selectedCampaignId if it becomes invalid.
+    useEffect(() => {
+        if (selectedProjectId !== '__CREATE_NEW__') {
+            // Check if the currently selected campaign exists within the filtered campaigns for the project.
+            // If not, and it's not the 'create new' option, reset selectedCampaignId.
+            if (selectedCampaignId !== '__CREATE_NEW__' && !filteredCampaigns.some(c => c.id === selectedCampaignId)) {
+                setSelectedCampaignId('__CREATE_NEW__');
+            }
+        } else {
+            // If we are creating a new project, then no existing campaign should be selected.
             if (selectedCampaignId !== '__CREATE_NEW__') {
                 setSelectedCampaignId('__CREATE_NEW__');
             }
-            return [];
         }
-        const campaignsForProject = campaigns.filter(c => c.projectId === selectedProjectId);
-        if (!campaignsForProject.some(c => c.id === selectedCampaignId)) {
-            setSelectedCampaignId('__CREATE_NEW__');
-        }
-        return campaignsForProject;
-    }, [campaigns, selectedProjectId, selectedCampaignId]);
+    }, [selectedProjectId, filteredCampaigns, selectedCampaignId]);
 
 
     // --- HANDLERS & HELPERS ---
@@ -363,6 +375,8 @@ export const MagicCreatorDashboard: React.FC<MagicCreatorDashboardProps> = ({ us
         setGenerationResult(null);
         setGenerationSteps([]);
         setError(null);
+        setSelectedProjectId('__CREATE_NEW__'); // Reset selection
+        setSelectedCampaignId('__CREATE_NEW__'); // Reset selection
     }, []);
 
     const handleCancelGeneration = useCallback(() => {
@@ -375,7 +389,8 @@ export const MagicCreatorDashboard: React.FC<MagicCreatorDashboardProps> = ({ us
     const setupProject = async (userId: string, selectedId: string, newName: string) => {
         if (selectedId !== '__CREATE_NEW__') return selectedId;
         updateStepStatus('project', 'running');
-        const newProject = await addProject({ userId, name: newName || 'New AI Project', description: 'Generated by Magic Creator' });
+        const finalProjectName = newName.trim() || 'New AI Project';
+        const newProject = await addProject({ userId, name: finalProjectName, description: 'Generated by Magic Creator' });
         updateStepStatus('project', 'complete');
         return newProject.id;
     };
@@ -383,14 +398,16 @@ export const MagicCreatorDashboard: React.FC<MagicCreatorDashboardProps> = ({ us
     const setupCampaign = async (userId: string, projectId: string, selectedId: string, newName: string) => {
         if (selectedId !== '__CREATE_NEW__') return selectedId;
         updateStepStatus('campaign', 'running');
-        const newCampaign = await addCampaign({ userId, projectId, name: newName || 'New AI Campaign', goal: 'Generated from user input' });
+        const finalCampaignName = newName.trim() || 'New AI Campaign';
+        const newCampaign = await addCampaign({ userId, projectId, name: finalCampaignName, goal: 'Generated from user input' });
         updateStepStatus('campaign', 'complete');
         return newCampaign.id;
     };
 
     const setupTopic = async (userId: string, projectId: string, campaignId: string, newName: string) => {
         updateStepStatus('topic', 'running');
-        const newTopic = await addTopic({ userId, projectId, campaignId, name: newName });
+        const finalTopicName = newName.trim() || userInput.substring(0, 100) || 'Untitled Topic';
+        const newTopic = await addTopic({ userId, projectId, campaignId, name: finalTopicName });
         updateStepStatus('topic', 'complete');
         return newTopic.id;
     };
@@ -444,7 +461,7 @@ export const MagicCreatorDashboard: React.FC<MagicCreatorDashboardProps> = ({ us
             const failedStep = generationSteps.find(s => s.status === 'running')?.key || 'setup';
             updateStepStatus(failedStep, 'error', e.message || "An unexpected error occurred.");
         }
-    }, [user, userInput, scaffold, selectedProjectId, selectedCampaignId, language, shouldGenerateImage, selectedPlatforms, selectedProfileId, projects, campaigns, brandVoices, onOpenAuthModal, startGeneration, sourceCalendarEventId]);
+    }, [user, userInput, scaffold, selectedProjectId, selectedCampaignId, language, shouldGenerateImage, selectedPlatforms, selectedProfileId, projects, campaigns, brandVoices, onOpenAuthModal, startGeneration, sourceCalendarEventId, setupCampaign, setupProject, setupTopic, updateStepStatus, filteredCampaigns]);
 
     // --- RENDER LOGIC ---
 

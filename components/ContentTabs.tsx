@@ -1,5 +1,3 @@
-
-
 import React, { useState, useCallback, useEffect } from 'react';
 import { regeneratePlatformContent } from '../services/geminiService';
 import type { GeneratedContent, EditablePlatform, SavedContent, PerformanceAnalysis } from '../types';
@@ -249,25 +247,43 @@ export const ContentTabs: React.FC<ContentTabsProps> = ({ content, topic, langua
     );
 
     switch (activeTab) {
-      case 'main':
+      case 'main': {
+        const mainImage = content.images && content.images[0];
+        const additionalImages = content.images && content.images.length > 1 ? content.images.slice(1) : [];
+
         return (
             <ContentCard 
                 title={content.mainArticle.title}
                 copyText={`Title: ${content.mainArticle.title}\n\n${content.mainArticle.body}`}
             >
-                 {content.image.url ? (
+                 {mainImage ? (
                     <>
-                        <img src={content.image.url} alt={content.image.prompt} className="w-full h-auto rounded-lg mb-6 shadow-lg object-cover aspect-video" />
-                        <p className="text-xs italic text-gray-500 mb-4">AI-generated image prompt: "{content.image.prompt}"</p>
+                        <img src={mainImage.url} alt={mainImage.prompt} className="w-full h-auto rounded-lg mb-6 shadow-lg object-cover aspect-video" />
+                        <p className="text-xs italic text-gray-500 mb-4">AI-generated image prompt: "{mainImage.prompt}"</p>
                     </>
                 ) : (
                      <div className="w-full h-auto rounded-lg mb-6 bg-zinc-900 border-2 border-dashed border-zinc-700 aspect-video flex items-center justify-center">
-                        <p className="text-zinc-500">{content.image.prompt}</p>
+                        <p className="text-zinc-500">Visual asset generation was disabled.</p>
                      </div>
                 )}
                  <div dangerouslySetInnerHTML={{ __html: content.mainArticle.body.replace(/\n/g, '<br />') }} />
+
+                 {additionalImages.length > 0 && (
+                    <div className="mt-8 pt-6 border-t border-gray-700">
+                        <h4 className="text-xl font-bold text-purple-300 mb-4">Additional Visual Assets</h4>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            {additionalImages.map((image, index) => (
+                                <div key={index} className="bg-zinc-900 rounded-lg overflow-hidden border border-zinc-700">
+                                    <img src={image.url} alt={image.prompt} className="w-full h-auto object-cover aspect-video" />
+                                    <p className="text-xs italic text-zinc-500 p-3">{image.prompt}</p>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )}
             </ContentCard>
         );
+      }
       case 'analysis':
         if (!content.analysis) return null;
         return <PerformanceAnalysisDisplay analysis={content.analysis} />;

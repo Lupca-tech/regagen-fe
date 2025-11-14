@@ -114,10 +114,8 @@ export const GenerationProvider: React.FC<{ children: React.ReactNode }> = ({ ch
             // If the task is currently active, abort the API call
             if (activeGenerationId === taskId && activeController.current) {
                 activeController.current.abort();
-                activeController.current = null; // Clear the controller
             }
 
-            // Fix: Rewrote map to use a block body to prevent TypeScript from incorrectly widening the 'status' literal type to 'string'.
             // Update status and filter out the cancelled task immediately
             return prevTasks.map((task): GenerationTask => {
                 if (task.id === taskId) {
@@ -176,7 +174,11 @@ export const GenerationProvider: React.FC<{ children: React.ReactNode }> = ({ ch
                             selectedPlatforms || new Set(),
                             onProgressCallback,
                             generationContext,
+                            controller.signal
                         );
+
+                        // CRITICAL CHECK: Abort before saving data.
+                        if (controller.signal.aborted) throw new DOMException('Aborted', 'AbortError');
 
                         // Save generated content if context is available (from dashboard or magic creator)
                         if (userId && topic && typeof topic !== 'string' && topic.id && project?.id && campaign?.id) {
@@ -199,8 +201,11 @@ export const GenerationProvider: React.FC<{ children: React.ReactNode }> = ({ ch
                         if (!project || !campaign || !count || !userId) {
                             throw new Error("Missing parameters for topics generation.");
                         }
-                        const topicsArray = await generateTopicsAI(project, campaign, count);
+                        const topicsArray = await generateTopicsAI(project, campaign, count, controller.signal);
                         result = topicsArray; // Store the array of topic names
+
+                        if (controller.signal.aborted) throw new DOMException('Aborted', 'AbortError');
+
                         await addMultipleTopics(result.map((name: string) => ({ name })), userId, project.id, campaign.id);
                     } 
                     // --- Content Refinement (re-writing specific platform content) ---
@@ -210,7 +215,7 @@ export const GenerationProvider: React.FC<{ children: React.ReactNode }> = ({ ch
                             throw new Error("Missing parameters for content refinement.");
                         }
                         const topicNameString = typeof topic === 'string' ? topic : (topic as Topic).name;
-                        result = await regeneratePlatformContent(platform, topicNameString, currentContent, userPrompt, language);
+                        result = await regeneratePlatformContent(platform, topicNameString, currentContent, userPrompt, language, controller.signal);
                     }
                     // --- Existing Content Analysis ---
                     else if (nextQueuedTask.context.type === 'analyzeContent') {
@@ -220,7 +225,10 @@ export const GenerationProvider: React.FC<{ children: React.ReactNode }> = ({ ch
                         }
                         const platformsToAnalyze = (['web', 'tiktok', 'facebook'] as const).filter(p => content[p]);
                         onProgressCallback(25, 'Analyzing content...');
-                        result = await analyzePerformance(content, platformsToAnalyze);
+                        result = await analyzePerformance(content, platformsToAnalyze, controller.signal);
+
+                        if (controller.signal.aborted) throw new DOMException('Aborted', 'AbortError');
+                        
                         onProgressCallback(75, 'Saving analysis...');
                         await updateContentAnalysis(content.id, result);
                     }
@@ -231,7 +239,10 @@ export const GenerationProvider: React.FC<{ children: React.ReactNode }> = ({ ch
                             throw new Error("Missing parameters for calendar suggestion generation.");
                         }
                         onProgressCallback(25, 'Searching for trends and events...');
-                        result = await generateCalendarSuggestions(calendarSettings, currentDate);
+                        result = await generateCalendarSuggestions(calendarSettings, currentDate, controller.signal);
+
+                        if (controller.signal.aborted) throw new DOMException('Aborted', 'AbortError');
+
                         onProgressCallback(75, 'Populating calendar...');
                         
                         const eventsToAdd = result.map((suggestion: any) => ({
@@ -243,21 +254,17 @@ export const GenerationProvider: React.FC<{ children: React.ReactNode }> = ({ ch
                         await addCalendarEventsBatch(userId, eventsToAdd);
                     }
                     
-                    // Check if the task was aborted during processing
-                    if (controller.signal.aborted) {
-                        updateTask(nextQueuedTask.id, { status: 'cancelled', message: 'Task cancelled.' });
-                    } else {
-                        // Task completed successfully
-                        updateTask(nextQueuedTask.id, { status: 'success', message: 'Generation complete!', progress: 100, generatedResult: result });
-                        // Call the success callback provided in the task context
-                        if (nextQueuedTask.context.onSuccess) {
-                            if (nextQueuedTask.context.type === 'refineContent' && nextQueuedTask.context.params.platform) {
-                                nextQueuedTask.context.onSuccess(result, nextQueuedTask.context.params.platform);
-                            } else {
-                                nextQueuedTask.context.onSuccess(result);
-                            }
+                    // Task completed successfully
+                    updateTask(nextQueuedTask.id, { status: 'success', message: 'Generation complete!', progress: 100, generatedResult: result });
+                    // Call the success callback provided in the task context
+                    if (nextQueuedTask.context.onSuccess) {
+                        if (nextQueuedTask.context.type === 'refineContent' && nextQueuedTask.context.params.platform) {
+                            nextQueuedTask.context.onSuccess(result, nextQueuedTask.context.params.platform);
+                        } else {
+                            nextQueuedTask.context.onSuccess(result);
                         }
                     }
+
                 } catch (e: any) {
                     if (e.name === 'AbortError') {
                         updateTask(nextQueuedTask.id, { status: 'cancelled', message: 'Generation cancelled.' });

@@ -1,14 +1,14 @@
-
 import React, { useState } from 'react';
 import { useGeneration } from '../../contexts/GenerationContext';
 import { Project, Campaign, Topic } from '../../types';
 import { PlusIcon, EditIcon, DeleteIcon, SparkleIcon, BackIcon, SkeletonItem } from '../Icons';
+import { ProjectWithCounts, CampaignWithCounts } from '../ProjectsDashboard'; // Import augmented types
 
 type ModalType = 'project' | 'campaign' | 'topic';
 
 interface ProjectBoardViewProps {
-    projects: Project[];
-    campaigns: Campaign[];
+    projects: ProjectWithCounts[]; // Use augmented type
+    campaigns: CampaignWithCounts[]; // Use augmented type
     topics: Topic[];
     loading: { projects: boolean; campaigns: boolean; topics: boolean };
     selectedProjectId: string | null;
@@ -25,12 +25,29 @@ interface ProjectBoardViewProps {
     onBackToCampaigns: () => void;
 }
 
-const ItemButton: React.FC<{ item: Project | Campaign; type: 'project' | 'campaign'; isSelected: boolean; onSelect: () => void; onEdit: () => void; onDelete: () => void }> = React.memo(({ item, type, isSelected, onSelect, onEdit, onDelete }) => (
+const ItemButton: React.FC<{ 
+    item: ProjectWithCounts | CampaignWithCounts; 
+    type: 'project' | 'campaign'; 
+    isSelected: boolean; 
+    onSelect: () => void; 
+    onEdit: () => void; 
+    onDelete: () => void 
+}> = React.memo(({ item, type, isSelected, onSelect, onEdit, onDelete }) => (
     <div className={`relative rounded-lg border-2 transition-all duration-200 ${isSelected ? 'bg-pink-500/10 border-pink-500' : 'bg-zinc-900/50 border-transparent hover:bg-zinc-800'}`}>
         <button onClick={onSelect} className="w-full text-left p-3 pr-20">
             <h3 className={`font-bold truncate ${isSelected ? 'text-pink-300' : 'text-zinc-200'}`}>{item.name}</h3>
             {(item as Project).description && <p className="text-xs text-zinc-400 truncate mt-1">{(item as Project).description}</p>}
             {(item as Campaign).goal && <p className="text-xs text-zinc-400 truncate mt-1">{(item as Campaign).goal}</p>}
+            
+            <div className="text-xs text-zinc-500 mt-2">
+                <p>Created: {item.formattedCreatedAt}</p>
+                {type === 'project' && 'campaignCount' in item && (
+                    <p>Campaigns: {item.campaignCount}</p>
+                )}
+                {type === 'campaign' && 'topicCount' in item && (
+                    <p>Topics: {item.topicCount}</p>
+                )}
+            </div>
         </button>
         <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
             <button onClick={onEdit} className="p-1.5 text-zinc-400 hover:text-white hover:bg-zinc-700 rounded-md"><EditIcon /></button>

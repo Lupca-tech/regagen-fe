@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useCallback } from 'react';
 import { EditablePlatform, BrandVoiceProfile } from '../types';
 import { getBrandVoiceProfiles, User } from '../services/firebaseService';
@@ -160,7 +159,7 @@ export const TopicForm: React.FC<TopicFormProps> = React.memo(({
                   <div className={`block w-12 h-6 rounded-full transition-colors ${shouldGenerateImage ? 'bg-pink-600' : 'bg-zinc-700'} ${isLoading ? 'bg-zinc-600' : ''}`}></div>
                   <div className={`dot absolute left-1 top-1 bg-white w-4 h-4 rounded-full transition-transform ${shouldGenerateImage ? 'translate-x-6' : ''}`}></div>
               </div>
-              <span className={`ml-3 text-sm transition-colors ${isLoading ? 'text-zinc-500' : 'text-zinc-300 group-hover:text-white'}`}>Generate Cover Image</span>
+              <span className={`ml-3 text-sm transition-colors ${isLoading ? 'text-zinc-500' : 'text-zinc-300 group-hover:text-white'}`}>Generate Visual Assets</span>
           </label>
           
           <button

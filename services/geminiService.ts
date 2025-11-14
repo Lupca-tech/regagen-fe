@@ -1,9 +1,3 @@
-
-
-
-
-
-
 import { GoogleGenAI, Type, Modality } from "@google/genai";
 import type { GeneratedContent, EditablePlatform, BrandVoiceProfile, Project, Campaign, PerformanceAnalysis, CalendarSettings } from '../types';
 import type { User } from './firebaseService';
@@ -67,7 +61,7 @@ const allPlatformProperties = {
 
 type ProgressCallback = (progress: number, message: string) => void;
 
-async function generateImage(prompt: string, onProgress: ProgressCallback): Promise<string> {
+async function generateImage(prompt: string, onProgress: ProgressCallback, signal?: AbortSignal): Promise<string> {
     try {
         onProgress(75, "Generating cover image...");
         const response = await ai.models.generateContent({
@@ -78,6 +72,7 @@ async function generateImage(prompt: string, onProgress: ProgressCallback): Prom
             config: {
                 responseModalities: [Modality.IMAGE],
             },
+            signal,
         });
 
         for (const part of response.candidates?.[0]?.content?.parts || []) {
@@ -87,9 +82,14 @@ async function generateImage(prompt: string, onProgress: ProgressCallback): Prom
                 return `data:image/png;base64,${base64ImageBytes}`;
             }
         }
+        // If the loop completes without returning, it means the API call succeeded but no image was in the response.
+        // This can happen due to safety filters. We throw an error to trigger the catch block.
         throw new Error("No image data found in response.");
 
     } catch (error) {
+        if ((error as Error).name === 'AbortError') {
+          throw error;
+        }
         console.error("Error generating image:", error);
          onProgress(90, "Image failed, using placeholder.");
         // Return a placeholder image on failure
@@ -107,7 +107,8 @@ interface FullGenerationContext {
 
 export const analyzePerformance = async (
   content: GeneratedContent,
-  platforms: ('web' | 'tiktok' | 'facebook')[]
+  platforms: ('web' | 'tiktok' | 'facebook')[],
+  signal?: AbortSignal
 ): Promise<PerformanceAnalysis> => {
     const seoAnalysisSchema = {
         type: Type.OBJECT,
@@ -230,6 +231,7 @@ export const analyzePerformance = async (
                 responseMimeType: "application/json",
                 responseSchema: dynamicAnalysisSchema,
             },
+            signal,
         });
         
         return JSON.parse(response.text.trim());
@@ -237,6 +239,7 @@ export const analyzePerformance = async (
     } catch (error) {
         console.error("Error analyzing content performance:", error);
         if (error instanceof Error) {
+            if (error.name === 'AbortError') throw error;
             throw new Error(`Gemini API call failed during performance analysis: ${error.message}`);
         }
         throw new Error("An unexpected error occurred during performance analysis.");
@@ -250,7 +253,8 @@ export const generateContentFlow = async (
   shouldGenerateImage: boolean, 
   selectedPlatforms: Set<EditablePlatform>,
   onProgress: ProgressCallback = () => {},
-  generationContext?: FullGenerationContext
+  generationContext?: FullGenerationContext,
+  signal?: AbortSignal
 ): Promise<GeneratedContent> => {
   try {
     const properties: any = {
@@ -265,15 +269,16 @@ export const generateContentFlow = async (
     };
     
     if (shouldGenerateImage) {
-      properties.imagePrompt = { 
-        type: Type.STRING, 
-        description: "A detailed, visually descriptive prompt for an image generation AI, based on the article's content. This is optional and should only be generated if requested."
+      properties.imagePrompts = {
+        type: Type.ARRAY,
+        items: { type: Type.STRING },
+        description: "An array of 3-5 detailed, visually descriptive prompts for an image generation AI. The first prompt must be for a general-purpose cover image. Subsequent prompts should illustrate key points in the article, create a storyboard for a video script, or assets for a social media carousel, relevant to the selected platforms."
       };
     }
 
     const required = ['mainArticle'];
     if (shouldGenerateImage) {
-      required.push('imagePrompt');
+      required.push('imagePrompts');
     }
 
     for (const platform of selectedPlatforms) {
@@ -321,7 +326,7 @@ export const generateContentFlow = async (
     ${ragContext}
     1.  **Simulate Research (RAG Pre-computation):** First, act as a market research tool. For the given topic, internally brainstorm the top 3-5 trending keywords and imagine 2-3 highly-ranked articles.
     2.  **Core Generation (RAG Application):** Using this simulated research as your context, write a comprehensive, unique, and high-quality main blog post.
-    3.  **Image Prompt Generation:** ${shouldGenerateImage ? "Based on the article, create a detailed, dynamic, and visually descriptive prompt suitable for a text-to-image AI like Imagen." : "Image generation is disabled by the user. Do not generate an image prompt."}
+    3.  **Visual Asset Prompt Generation:** ${shouldGenerateImage ? "Based on the article and adapted content, create a set of 3-5 detailed, dynamic, and visually descriptive prompts suitable for a text-to-image AI. The first prompt MUST be for a general-purpose cover image. Subsequent prompts should be for: a) illustrating key sections of the web article, b) creating storyboard scenes for the TikTok/YouTube script, or c) summarizing key points for a Facebook/LinkedIn carousel. Generate prompts relevant to the platforms being created for." : "Visual asset generation is disabled by the user. Do not generate any image prompts."}
     4.  **Content Adaptation:** Adapt the main article into specific formats ONLY for the following selected platforms: ${Array.from(selectedPlatforms).join(', ')}.
     5.  **Language Requirement:** All generated content MUST be in this language: ${language}.
     6.  **Output:** Return all of this information in a single, structured JSON object that adheres to the provided schema. Do not include any text outside of the JSON object.`;
@@ -336,7 +341,9 @@ export const generateContentFlow = async (
         responseSchema: dynamicContentGenerationSchema,
         temperature: 0.8,
       },
+      signal,
     });
+    if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
 
     onProgress(50, "Writing and adapting content...");
     const textContentString = response.text.trim();
@@ -344,10 +351,7 @@ export const generateContentFlow = async (
     
     const result: GeneratedContent = {
       mainArticle: textContent.mainArticle,
-      image: {
-        url: '',
-        prompt: 'Image generation was disabled.',
-      },
+      images: [],
     };
 
     for (const platform of selectedPlatforms) {
@@ -356,31 +360,46 @@ export const generateContentFlow = async (
         }
     }
     
-    let imagePrompt = 'Image generation was disabled.';
-    if (shouldGenerateImage && textContent.imagePrompt) {
-        onProgress(70, "Creating image prompt...");
-        imagePrompt = textContent.imagePrompt;
-        result.image.url = await generateImage(imagePrompt, onProgress);
+    if (shouldGenerateImage && textContent.imagePrompts && Array.isArray(textContent.imagePrompts) && textContent.imagePrompts.length > 0) {
+        const imagePrompts: string[] = textContent.imagePrompts;
+        onProgress(75, `Generating ${imagePrompts.length} visual assets...`);
+
+        // Generate all images in parallel
+        const imageUrls = await Promise.all(
+            imagePrompts.map(prompt => generateImage(prompt, () => {}, signal)) // Use a no-op progress callback for parallel calls
+        );
+        if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
+
+        result.images = imageUrls.map((url, index) => ({
+            url: url,
+            prompt: imagePrompts[index]
+        }));
+
+        onProgress(90, "Visual assets received...");
     } else {
-        onProgress(90, "Skipping image generation...");
+        onProgress(90, "Skipping visual asset generation...");
     }
-    result.image.prompt = imagePrompt;
     
     onProgress(95, "Analyzing content performance...");
     const platformsToAnalyze = Array.from(selectedPlatforms).filter(p => ['web', 'tiktok', 'facebook'].includes(p)) as ('web' | 'tiktok' | 'facebook')[];
     if (platformsToAnalyze.length > 0) {
       try {
-        result.analysis = await analyzePerformance(result, platformsToAnalyze);
+        result.analysis = await analyzePerformance(result, platformsToAnalyze, signal);
       } catch (analysisError) {
+        if ((analysisError as Error).name === 'AbortError') throw analysisError;
         console.warn("Performance analysis failed, but content was generated:", analysisError);
         // Proceed without analysis data if it fails
       }
     }
+    if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
 
     onProgress(100, "Finalizing package...");
     return result;
 
   } catch (error) {
+    if ((error as Error).name === 'AbortError') {
+        throw error;
+    }
     console.error("Error in content generation flow:", error);
     if (error instanceof Error) {
         throw new Error(`Gemini API call failed: ${error.message}`);
@@ -394,7 +413,8 @@ export const regeneratePlatformContent = async (
   topic: string,
   currentContent: any,
   userPrompt: string,
-  language: string
+  language: string,
+  signal?: AbortSignal
 ): Promise<any> => {
     try {
         const systemInstruction = `You are an expert content editor. A user has provided you with existing content for a specific platform and a request for changes.
@@ -444,6 +464,7 @@ export const regeneratePlatformContent = async (
                 responseMimeType: "application/json",
                 responseSchema,
             },
+            signal,
         });
     
         const regeneratedContent = JSON.parse(response.text.trim());
@@ -452,6 +473,7 @@ export const regeneratePlatformContent = async (
     } catch (error) {
         console.error(`Error regenerating content for ${platform}:`, error);
         if (error instanceof Error) {
+            if (error.name === 'AbortError') throw error;
             throw new Error(`Gemini API call failed during regeneration: ${error.message}`);
         }
         throw new Error("An unexpected error occurred during content regeneration.");
@@ -506,7 +528,8 @@ export const analyzeBrandVoice = async (samples: string): Promise<Omit<BrandVoic
 export const generateTopicsAI = async (
   project: { name: string, description: string },
   campaign: { name: string, goal: string },
-  count: number
+  count: number,
+  signal?: AbortSignal
 ): Promise<string[]> => {
     try {
         const schema = {
@@ -546,6 +569,7 @@ export const generateTopicsAI = async (
                 responseSchema: schema,
                 temperature: 0.9,
             },
+            signal,
         });
 
         const result = JSON.parse(response.text.trim());
@@ -557,6 +581,7 @@ export const generateTopicsAI = async (
     } catch (error) {
         console.error("Error generating topics with AI:", error);
         if (error instanceof Error) {
+            if (error.name === 'AbortError') throw error;
             throw new Error(`Gemini API call failed during topic generation: ${error.message}`);
         }
         throw new Error("An unexpected error occurred during AI topic generation.");
@@ -605,7 +630,8 @@ export const analyzeInputForScaffolding = async (
 
 export const generateCalendarSuggestions = async (
   settings: CalendarSettings,
-  currentDate: Date
+  currentDate: Date,
+  signal?: AbortSignal
 ): Promise<{ title: string; date: string; type: 'trend' | 'event' }[]> => {
     try {
         const monthName = currentDate.toLocaleString('default', { month: 'long' });
@@ -629,6 +655,7 @@ export const generateCalendarSuggestions = async (
                 tools: [{ googleSearch: {} }],
                 temperature: 0.9,
             },
+            signal,
         });
 
         // The response text might be wrapped in markdown backticks, so we need to clean it.
@@ -649,6 +676,7 @@ export const generateCalendarSuggestions = async (
     } catch (error) {
         console.error("Error generating calendar suggestions with AI:", error);
         if (error instanceof Error) {
+            if (error.name === 'AbortError') throw error;
             throw new Error(`Gemini API call failed during calendar suggestion generation: ${error.message}`);
         }
         throw new Error("An unexpected error occurred during AI calendar suggestion generation.");

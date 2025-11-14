@@ -1,6 +1,3 @@
-
-
-
 import React, { useState, useEffect, useCallback } from 'react';
 import { User, getBrandVoiceProfiles } from '../../../services/firebaseService';
 import { Topic, EditablePlatform, BrandVoiceProfile } from '../../../types';
@@ -152,7 +149,7 @@ export const GenerationModal: React.FC<GenerationModalProps> = ({ topic, user, o
                                 <div className={`block w-12 h-6 rounded-full transition-colors ${shouldGenerateImage ? 'bg-pink-600' : 'bg-zinc-700'}`}></div>
                                 <div className={`dot absolute left-1 top-1 bg-white w-4 h-4 rounded-full transition-transform ${shouldGenerateImage ? 'translate-x-6' : ''}`}></div>
                             </div>
-                            <span className="ml-3 text-sm transition-colors text-zinc-300 group-hover:text-white">Generate Cover Image</span>
+                            <span className="ml-3 text-sm transition-colors text-zinc-300 group-hover:text-white">Generate Visual Assets</span>
                         </label>
                     </div>
                      <div className="flex justify-center sm:justify-end gap-3 pt-4">
