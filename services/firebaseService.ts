@@ -1,4 +1,5 @@
 
+
 import { initializeApp, type FirebaseApp, type FirebaseError } from 'firebase/app';
 import { 
   getAuth, 
@@ -42,7 +43,7 @@ import {
     getDownloadURL,
     type Storage
 } from 'firebase/storage';
-import type { GeneratedContent, SavedContent, Project, Campaign, Topic, BrandVoiceProfile } from '../types';
+import type { GeneratedContent, SavedContent, Project, Campaign, Topic, BrandVoiceProfile, PerformanceAnalysis } from '../types';
 
 
 // User-provided Firebase configuration
@@ -297,8 +298,21 @@ export const addMultipleTopics = async (topics: {name: string}[], userId: string
 // CONTENT (GENERATIONS)
 export const saveGeneratedContent = async (userId: string, topicText: string, language: string, content: GeneratedContent, context: { projectId: string; campaignId: string; topicId: string; }) => {
     const docRef = doc(collection(db, "generations"));
+    const { mainArticle, image, web, facebook, linkedin, x, tiktok, youtube, analysis } = content;
+
     await setDoc(docRef, {
-        ...content,
+        // Required fields from content
+        mainArticle,
+        image,
+        // Optional fields from content, defaulting to null to avoid 'undefined' errors
+        web: web || null,
+        facebook: facebook || null,
+        linkedin: linkedin || null,
+        x: x || null,
+        tiktok: tiktok || null,
+        youtube: youtube || null,
+        analysis: analysis || null,
+        // Metadata fields
         id: docRef.id,
         userId,
         topic: topicText,
@@ -308,6 +322,7 @@ export const saveGeneratedContent = async (userId: string, topicText: string, la
         topicId: context.topicId,
         createdAt: serverTimestamp()
     });
+    
     await updateDoc(doc(db, "topics", context.topicId), { status: 'Generated', contentId: docRef.id });
 }
 export const getContentById = async (contentId: string): Promise<SavedContent | null> => {
@@ -331,6 +346,10 @@ export const getUserContent = async (userId: string): Promise<SavedContent[]> =>
         throw handleFirestoreError(error, 'user content');
     }
 }
+export const updateContentAnalysis = (contentId: string, analysis: PerformanceAnalysis) => {
+    const docRef = doc(db, 'generations', contentId);
+    return updateDoc(docRef, { analysis });
+};
 
 // BRAND VOICE
 export const getBrandVoiceProfiles = async (userId: string): Promise<BrandVoiceProfile[]> => {

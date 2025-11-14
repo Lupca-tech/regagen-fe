@@ -2,6 +2,53 @@ export type View = 'magicCreator' | 'projects' | 'brandVoice' | 'account';
 
 export type EditablePlatform = 'web' | 'facebook' | 'linkedin' | 'x' | 'tiktok' | 'youtube';
 
+export interface SEOAnalysis {
+  score: number; // 0-100
+  headlineStrength: {
+    score: number; // 0-100
+    feedback: string;
+    suggestions: string[];
+  };
+  keywordAnalysis: {
+    density: number; // percentage
+    feedback: string;
+  };
+  readability: {
+    score: number; // A score from 0-100, where higher is better.
+    feedback: string;
+  };
+}
+
+export interface TikTokAnalysis {
+  hookScore: number; // 0-100
+  hookFeedback: string;
+  predictedRetention: number; // percentage
+  retentionFeedback: string;
+}
+
+export interface FacebookAnalysis {
+  engagementScore: number; // 0-100
+  ctaPresence: {
+    detected: boolean;
+    feedback: string;
+  };
+  sentiment: {
+    score: number; // -1 to 1 (negative to positive)
+    label: string; // e.g., 'Positive', 'Neutral'
+  };
+  lengthAnalysis: {
+    isOptimal: boolean;
+    feedback: string;
+  };
+}
+
+export interface PerformanceAnalysis {
+  web?: SEOAnalysis;
+  tiktok?: TikTokAnalysis;
+  facebook?: FacebookAnalysis;
+}
+
+
 export interface GeneratedContent {
   mainArticle: {
     title: string;
@@ -34,6 +81,7 @@ export interface GeneratedContent {
     title: string;
     description: string;
   };
+  analysis?: PerformanceAnalysis;
 }
 
 export type FirestoreTimestamp = {

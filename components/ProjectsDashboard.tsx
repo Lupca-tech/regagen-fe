@@ -1,7 +1,8 @@
 
+
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { User, getProjects, addProject, updateProject, deleteProject, getCampaigns, addCampaign, updateCampaign, deleteCampaign, getTopics, addTopic, updateTopic, deleteTopic, getContentById, getBrandVoiceProfiles } from '../services/firebaseService';
-import { Project, Campaign, Topic, SavedContent, BrandVoiceProfile, View, EditablePlatform } from '../types';
+import { Project, Campaign, Topic, SavedContent, BrandVoiceProfile, View, EditablePlatform, PerformanceAnalysis } from '../types';
 import { ContentTabs } from './ContentTabs';
 import { useGeneration } from '../contexts/GenerationContext';
 import { SearchIcon, BoardViewIcon, ListViewIcon, BackIcon, SkeletonItem } from './Icons';
@@ -283,6 +284,10 @@ export const ProjectsDashboard: React.FC<ProjectsDashboardProps> = ({ user, onNa
             };
         });
     }, []);
+    
+    const handleAnalysisGenerated = useCallback((analysis: PerformanceAnalysis) => {
+        setViewedContent(prev => prev ? { ...prev, analysis } : null);
+    }, []);
 
 
     // --- CRUD HANDLERS ---
@@ -403,8 +408,8 @@ export const ProjectsDashboard: React.FC<ProjectsDashboardProps> = ({ user, onNa
                             content={viewedContent}
                             topic={activeTopic.name}
                             language={viewedContent.language}
-                            onContentUpdate={handleUpdateViewedContent} // Use the new handler
-                            // isReadOnly={true} is removed to allow editing
+                            onContentUpdate={handleUpdateViewedContent}
+                            onAnalysisGenerated={handleAnalysisGenerated}
                         />
                     )
                 }

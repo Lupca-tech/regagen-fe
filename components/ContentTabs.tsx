@@ -2,18 +2,20 @@
 
 import React, { useState, useCallback, useEffect } from 'react';
 import { regeneratePlatformContent } from '../services/geminiService';
-import type { GeneratedContent, EditablePlatform } from '../types';
-import { ArticleIcon, WebIcon, FacebookIcon, LinkedInIcon, XIcon, TikTokIcon, YouTubeIcon, ClipboardIcon, CheckIcon, CodeBracketIcon, SparkleIcon } from './Icons';
+import type { GeneratedContent, EditablePlatform, SavedContent, PerformanceAnalysis } from '../types';
+import { ArticleIcon, WebIcon, FacebookIcon, LinkedInIcon, XIcon, TikTokIcon, YouTubeIcon, ClipboardIcon, CheckIcon, CodeBracketIcon, SparkleIcon, ChartBarIcon } from './Icons';
 import { useGeneration } from '../contexts/GenerationContext';
+import { PerformanceAnalysisDisplay } from './PerformanceAnalysis';
 
-type Tab = 'main' | EditablePlatform;
+type Tab = 'main' | EditablePlatform | 'analysis';
 
 interface ContentTabsProps {
-  content: GeneratedContent;
+  content: GeneratedContent & Partial<SavedContent>;
   topic: string;
   language: string;
   onContentUpdate: (platform: EditablePlatform, newContent: any) => void;
   isReadOnly?: boolean;
+  onAnalysisGenerated?: (analysis: PerformanceAnalysis) => void;
 }
 
 const CopyButton: React.FC<{ textToCopy: string }> = React.memo(({ textToCopy }) => {
@@ -170,13 +172,57 @@ const ContentCard: React.FC<{
     </div>
 ));
 
-export const ContentTabs: React.FC<ContentTabsProps> = ({ content, topic, language, onContentUpdate, isReadOnly = false }) => {
+const AnalyzeButton: React.FC<{
+    content: SavedContent;
+    onAnalysisGenerated: (analysis: PerformanceAnalysis) => void;
+}> = ({ content, onAnalysisGenerated }) => {
+    const { startGeneration, activeGenerations } = useGeneration();
+
+    const generationId = `analyze-${content.id}`;
+    const task = activeGenerations.find(g => g.id === generationId);
+    const isLoading = task?.status === 'running' || task?.status === 'queued';
+
+    const handleAnalyze = () => {
+        if (isLoading) return;
+        startGeneration({
+            id: generationId,
+            topicName: `Analysis for ${content.topic}`,
+            status: 'queued',
+            progress: 0,
+            message: 'Queued for analysis...',
+            context: {
+                type: 'analyzeContent',
+                view: 'dashboard',
+                params: {
+                    content: content,
+                },
+                onSuccess: (analysisResult: any) => {
+                    onAnalysisGenerated(analysisResult);
+                }
+            }
+        });
+    };
+
+    return (
+        <button
+            onClick={handleAnalyze}
+            disabled={isLoading}
+            className={`flex items-center gap-2 px-3 sm:px-4 py-2 text-sm sm:text-base font-medium rounded-lg transition-all duration-300 whitespace-nowrap bg-purple-600 text-white hover:bg-purple-700 disabled:opacity-60 disabled:cursor-wait`}
+        >
+            <SparkleIcon className={`w-5 h-5 ${isLoading ? 'animate-pulse' : ''}`} />
+            {isLoading ? 'Analyzing...' : 'Analyze Performance'}
+        </button>
+    );
+};
+
+
+export const ContentTabs: React.FC<ContentTabsProps> = ({ content, topic, language, onContentUpdate, isReadOnly = false, onAnalysisGenerated }) => {
   const [activeTab, setActiveTab] = useState<Tab>('main');
   const [webContentView, setWebContentView] = useState<'text' | 'html'>('text');
 
   useEffect(() => {
     // Reset to 'main' if the current active tab's content is no longer available
-    if (activeTab !== 'main' && !content[activeTab]) {
+    if (activeTab !== 'main' && activeTab !== 'analysis' && !content[activeTab]) {
         setActiveTab('main');
     }
     // Reset web content view when changing tabs
@@ -184,6 +230,12 @@ export const ContentTabs: React.FC<ContentTabsProps> = ({ content, topic, langua
       setWebContentView('text');
     }
   }, [activeTab, content]);
+  
+  useEffect(() => {
+    if (content.analysis && activeTab !== 'analysis') {
+      setActiveTab('analysis');
+    }
+  }, [content.analysis]);
 
   const renderContent = () => {
     const editorFor = (platform: EditablePlatform) => (
@@ -216,6 +268,9 @@ export const ContentTabs: React.FC<ContentTabsProps> = ({ content, topic, langua
                  <div dangerouslySetInnerHTML={{ __html: content.mainArticle.body.replace(/\n/g, '<br />') }} />
             </ContentCard>
         );
+      case 'analysis':
+        if (!content.analysis) return null;
+        return <PerformanceAnalysisDisplay analysis={content.analysis} />;
       case 'web': {
         if (!content.web) return null;
         
@@ -373,6 +428,13 @@ export const ContentTabs: React.FC<ContentTabsProps> = ({ content, topic, langua
       <div className="bg-gray-800/80 backdrop-blur-sm p-2 rounded-t-xl border-b border-gray-700 overflow-x-auto">
         <div className="flex space-x-2">
             <TabButton label="Article" icon={<ArticleIcon className="w-5 h-5"/>} isActive={activeTab === 'main'} onClick={() => setActiveTab('main')} />
+            {content.analysis ? (
+                <TabButton label="Analysis" icon={<ChartBarIcon className="w-5 h-5"/>} isActive={activeTab === 'analysis'} onClick={() => setActiveTab('analysis')} />
+            ) : (
+                content.id && onAnalysisGenerated && !isReadOnly && (
+                    <AnalyzeButton content={content as SavedContent} onAnalysisGenerated={onAnalysisGenerated} />
+                )
+            )}
             {content.web && <TabButton label="Web/SEO" icon={<WebIcon className="w-5 h-5"/>} isActive={activeTab === 'web'} onClick={() => setActiveTab('web')} />}
             {content.facebook && <TabButton label="Facebook" icon={<FacebookIcon className="w-5 h-5"/>} isActive={activeTab === 'facebook'} onClick={() => setActiveTab('facebook')} />}
             {content.linkedin && <TabButton label="LinkedIn" icon={<LinkedInIcon className="w-5 h-5"/>} isActive={activeTab === 'linkedin'} onClick={() => setActiveTab('linkedin')} />}

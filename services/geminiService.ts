@@ -3,7 +3,7 @@
 
 
 import { GoogleGenAI, Type, Modality } from "@google/genai";
-import type { GeneratedContent, EditablePlatform, BrandVoiceProfile, Project, Campaign } from '../types';
+import type { GeneratedContent, EditablePlatform, BrandVoiceProfile, Project, Campaign, PerformanceAnalysis } from '../types';
 import type { User } from './firebaseService';
 
 
@@ -103,6 +103,145 @@ interface FullGenerationContext {
     brandVoiceProfile?: Omit<BrandVoiceProfile, 'id' | 'userId' | 'createdAt'>;
 }
 
+export const analyzePerformance = async (
+  content: GeneratedContent,
+  platforms: ('web' | 'tiktok' | 'facebook')[]
+): Promise<PerformanceAnalysis> => {
+    const seoAnalysisSchema = {
+        type: Type.OBJECT,
+        properties: {
+            score: { type: Type.NUMBER, description: "Overall SEO score from 0 to 100." },
+            headlineStrength: {
+                type: Type.OBJECT,
+                properties: {
+                    score: { type: Type.NUMBER, description: "Headline strength score from 0 to 100 based on length, keywords, and sentiment." },
+                    feedback: { type: Type.STRING, description: "Concise feedback on the headline's effectiveness." },
+                    suggestions: { type: Type.ARRAY, items: { type: Type.STRING }, description: "3 alternative, stronger headline suggestions." }
+                },
+                required: ["score", "feedback", "suggestions"]
+            },
+            keywordAnalysis: {
+                type: Type.OBJECT,
+                properties: {
+                    density: { type: Type.NUMBER, description: "Keyword density percentage for the focus keyword." },
+                    feedback: { type: Type.STRING, description: "Feedback on keyword usage and placement." }
+                },
+                required: ["density", "feedback"]
+            },
+            readability: {
+                type: Type.OBJECT,
+                properties: {
+                    score: { type: Type.NUMBER, description: "Readability score from 0-100 (like Flesch-Kincaid), where higher is better and easier to read." },
+                    feedback: { type: Type.STRING, description: "Feedback on the content's readability and complexity." }
+                },
+                required: ["score", "feedback"]
+            }
+        },
+        required: ["score", "headlineStrength", "keywordAnalysis", "readability"]
+    };
+
+    const tiktokAnalysisSchema = {
+        type: Type.OBJECT,
+        properties: {
+            hookScore: { type: Type.NUMBER, description: "A score from 0-100 on how engaging the first 3 seconds of the script are." },
+            hookFeedback: { type: Type.STRING, description: "Specific feedback on the script's hook and how to improve it." },
+            predictedRetention: { type: Type.NUMBER, description: "Predicted audience retention percentage for the full video." },
+            retentionFeedback: { type: Type.STRING, description: "Feedback on what might affect viewer retention throughout the script." }
+        },
+        required: ["hookScore", "hookFeedback", "predictedRetention", "retentionFeedback"]
+    };
+
+    const facebookAnalysisSchema = {
+        type: Type.OBJECT,
+        properties: {
+            engagementScore: { type: Type.NUMBER, description: "A score from 0-100 predicting the post's engagement potential (likes, comments, shares)." },
+            ctaPresence: {
+                type: Type.OBJECT,
+                properties: {
+                    detected: { type: Type.BOOLEAN, description: "Whether a clear call-to-action was detected." },
+                    feedback: { type: Type.STRING, description: "Feedback on the CTA's effectiveness or absence." }
+                },
+                required: ["detected", "feedback"]
+            },
+            sentiment: {
+                type: Type.OBJECT,
+                properties: {
+                    score: { type: Type.NUMBER, description: "Sentiment score from -1 (very negative) to 1 (very positive)." },
+                    label: { type: Type.STRING, description: "Sentiment label (e.g., 'Positive', 'Neutral', 'Mixed')." }
+                },
+                required: ["score", "label"]
+            },
+            lengthAnalysis: {
+                type: Type.OBJECT,
+                properties: {
+                    isOptimal: { type: Type.BOOLEAN, description: "Whether the post length is considered optimal for Facebook engagement." },
+                    feedback: { type: Type.STRING, description: "Feedback on the post's length and suggestions if needed." }
+                },
+                required: ["isOptimal", "feedback"]
+            }
+        },
+        required: ["engagementScore", "ctaPresence", "sentiment", "lengthAnalysis"]
+    };
+
+    const analysisProperties: any = {};
+    const requiredProperties: string[] = [];
+    let contentToAnalyze = "Here is the content to analyze:\n\n";
+
+    if (platforms.includes('web') && content.web) {
+        analysisProperties.web = seoAnalysisSchema;
+        requiredProperties.push('web');
+        contentToAnalyze += `--- WEB CONTENT ---\nMeta Title: ${content.web.metaTitle}\nFocus Keyword: ${content.web.focusKeyword}\nBody:\n${content.web.body}\n\n`;
+    }
+    if (platforms.includes('tiktok') && content.tiktok) {
+        analysisProperties.tiktok = tiktokAnalysisSchema;
+        requiredProperties.push('tiktok');
+        contentToAnalyze += `--- TIKTOK SCRIPT ---\n${content.tiktok.script}\n\n`;
+    }
+    if (platforms.includes('facebook') && content.facebook) {
+        analysisProperties.facebook = facebookAnalysisSchema;
+        requiredProperties.push('facebook');
+        contentToAnalyze += `--- FACEBOOK POST ---\n${content.facebook.postText}\n\n`;
+    }
+
+    if (requiredProperties.length === 0) return {};
+
+    const dynamicAnalysisSchema = {
+        type: Type.OBJECT,
+        properties: analysisProperties,
+        required: requiredProperties,
+    };
+
+    const systemInstruction = `You are a world-class performance marketing analyst and content strategist. Your task is to analyze generated content for various platforms and provide a detailed, data-driven "Pre-Publish Performance Analysis". You must score the content on key metrics and provide actionable feedback for improvement.
+
+    - **For Web/SEO content:** Analyze the provided meta title, focus keyword, and body. Evaluate headline strength, keyword density, and readability. Provide concrete suggestions for better headlines.
+    - **For TikTok scripts:** Focus on the first 3 seconds to score the "hook". Predict the overall retention rate based on the script's structure and flow.
+    - **For Facebook posts:** Evaluate the potential for engagement. Check for a clear Call-to-Action (CTA), analyze the sentiment, and assess if the length is optimal for the platform.
+
+    Your output MUST be a clean JSON object that adheres to the provided schema. Do not include any text outside of the JSON object.`;
+
+    try {
+        const response = await ai.models.generateContent({
+            model: "gemini-2.5-pro",
+            contents: contentToAnalyze,
+            config: {
+                systemInstruction,
+                responseMimeType: "application/json",
+                responseSchema: dynamicAnalysisSchema,
+            },
+        });
+        
+        return JSON.parse(response.text.trim());
+
+    } catch (error) {
+        console.error("Error analyzing content performance:", error);
+        if (error instanceof Error) {
+            throw new Error(`Gemini API call failed during performance analysis: ${error.message}`);
+        }
+        throw new Error("An unexpected error occurred during performance analysis.");
+    }
+};
+
+
 export const generateContentFlow = async (
   topic: string, 
   language: string, 
@@ -200,23 +339,12 @@ export const generateContentFlow = async (
     onProgress(50, "Writing and adapting content...");
     const textContentString = response.text.trim();
     const textContent = JSON.parse(textContentString);
-
-    let imageUrl = '';
-    let imagePrompt = 'Image generation was disabled.';
-
-    if (shouldGenerateImage && textContent.imagePrompt) {
-        onProgress(70, "Creating image prompt...");
-        imagePrompt = textContent.imagePrompt;
-        imageUrl = await generateImage(imagePrompt, onProgress);
-    } else {
-        onProgress(90, "Skipping image generation...");
-    }
     
     const result: GeneratedContent = {
       mainArticle: textContent.mainArticle,
       image: {
-        url: imageUrl,
-        prompt: imagePrompt,
+        url: '',
+        prompt: 'Image generation was disabled.',
       },
     };
 
@@ -225,8 +353,29 @@ export const generateContentFlow = async (
             result[platform] = textContent[platform];
         }
     }
+    
+    let imagePrompt = 'Image generation was disabled.';
+    if (shouldGenerateImage && textContent.imagePrompt) {
+        onProgress(70, "Creating image prompt...");
+        imagePrompt = textContent.imagePrompt;
+        result.image.url = await generateImage(imagePrompt, onProgress);
+    } else {
+        onProgress(90, "Skipping image generation...");
+    }
+    result.image.prompt = imagePrompt;
+    
+    onProgress(95, "Analyzing content performance...");
+    const platformsToAnalyze = Array.from(selectedPlatforms).filter(p => ['web', 'tiktok', 'facebook'].includes(p)) as ('web' | 'tiktok' | 'facebook')[];
+    if (platformsToAnalyze.length > 0) {
+      try {
+        result.analysis = await analyzePerformance(result, platformsToAnalyze);
+      } catch (analysisError) {
+        console.warn("Performance analysis failed, but content was generated:", analysisError);
+        // Proceed without analysis data if it fails
+      }
+    }
 
-    onProgress(95, "Finalizing package...");
+    onProgress(100, "Finalizing package...");
     return result;
 
   } catch (error) {

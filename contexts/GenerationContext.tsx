@@ -1,12 +1,9 @@
 
 
-
-
-
 import React, { createContext, useContext, useState, useCallback, useEffect, useRef } from 'react';
-import { generateContentFlow, generateTopicsAI, regeneratePlatformContent } from '../services/geminiService';
-import { saveGeneratedContent, addMultipleTopics } from '../services/firebaseService';
-import type { GeneratedContent, Topic, BrandVoiceProfile, EditablePlatform, Project, Campaign } from '../types';
+import { generateContentFlow, generateTopicsAI, regeneratePlatformContent, analyzePerformance } from '../services/geminiService';
+import { saveGeneratedContent, addMultipleTopics, updateContentAnalysis } from '../services/firebaseService';
+import type { GeneratedContent, Topic, BrandVoiceProfile, EditablePlatform, Project, Campaign, SavedContent } from '../types';
 import type { User } from 'firebase/auth';
 
 export interface GenerationTask {
@@ -17,7 +14,7 @@ export interface GenerationTask {
     message: string;
     generatedResult?: any; // To store the actual generated content/topics
     context: {
-        type: 'content' | 'topics' | 'refineContent';
+        type: 'content' | 'topics' | 'refineContent' | 'analyzeContent';
         // Fix: Added 'magicCreator' to the view type to support the Magic Creator dashboard.
         view: 'creator' | 'dashboard' | 'magicCreator';
         params: {
@@ -43,6 +40,9 @@ export interface GenerationTask {
             platform?: EditablePlatform;
             currentContent?: any;
             userPrompt?: string;
+
+            // For analyzeContent tasks
+            content?: SavedContent;
         };
         onSuccess?: (result?: any, platform?: EditablePlatform) => void;
     };
@@ -208,6 +208,18 @@ export const GenerationProvider: React.FC<{ children: React.ReactNode }> = ({ ch
                         }
                         const topicNameString = typeof topic === 'string' ? topic : (topic as Topic).name;
                         result = await regeneratePlatformContent(platform, topicNameString, currentContent, userPrompt, language);
+                    }
+                    // --- Existing Content Analysis ---
+                    else if (nextQueuedTask.context.type === 'analyzeContent') {
+                        const { content } = nextQueuedTask.context.params;
+                        if (!content || !content.id) {
+                            throw new Error("Missing content or content ID for analysis task.");
+                        }
+                        const platformsToAnalyze = (['web', 'tiktok', 'facebook'] as const).filter(p => content[p]);
+                        onProgressCallback(25, 'Analyzing content...');
+                        result = await analyzePerformance(content, platformsToAnalyze);
+                        onProgressCallback(75, 'Saving analysis...');
+                        await updateContentAnalysis(content.id, result);
                     }
                     
                     // Check if the task was aborted during processing
