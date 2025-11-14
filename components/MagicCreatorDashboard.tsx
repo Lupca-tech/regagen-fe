@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { User, getProjects, getAllUserCampaigns, getBrandVoiceProfiles, addProject, addCampaign, addTopic } from '../services/firebaseService';
 import { analyzeInputForScaffolding } from '../services/geminiService';
@@ -56,7 +55,7 @@ const useDebounce = (value: string, delay: number): string => {
 
 // --- REFACTORED SUB-COMPONENTS ---
 
-const GenerationProgress: React.FC<{ steps: GenerationStep[], taskProgress: number, taskMessage: string }> = React.memo(({ steps, taskProgress, taskMessage }) => {
+const GenerationProgress: React.FC<{ steps: GenerationStep[], taskProgress: number, taskMessage: string, onCancel: () => void }> = React.memo(({ steps, taskProgress, taskMessage, onCancel }) => {
     const completedStepsCount = steps.filter(s => s.status === 'complete').length;
     const stepWeight = 100 / steps.length;
     const runningProgress = steps.find(s => s.status === 'running' && s.key === 'content') 
@@ -100,6 +99,16 @@ const GenerationProgress: React.FC<{ steps: GenerationStep[], taskProgress: numb
                     </li>
                 ))}
             </ul>
+
+            <div className="mt-8 text-center">
+                <button
+                    onClick={onCancel}
+                    className="flex items-center justify-center mx-auto px-4 py-2 text-sm font-semibold text-red-400 bg-transparent border border-red-500/50 rounded-lg hover:bg-red-900/30 hover:text-red-300 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-zinc-900 focus:ring-red-500 transition-all duration-300"
+                >
+                    <XCircleIcon className="w-5 h-5 mr-2" />
+                    Cancel Generation
+                </button>
+            </div>
         </div>
     );
 });
@@ -251,7 +260,7 @@ export const MagicCreatorDashboard: React.FC<MagicCreatorDashboardProps> = ({ us
     
     const [generationSteps, setGenerationSteps] = useState<GenerationStep[]>([]);
     const [generationResult, setGenerationResult] = useState<{ content: GeneratedContent, context: any } | null>(null);
-    const { startGeneration, activeGenerations } = useGeneration();
+    const { startGeneration, activeGenerations, cancelGeneration } = useGeneration();
     const generationTask = activeGenerations.find(g => g.context.type === 'content' && g.context.view === 'magicCreator');
 
     const debouncedUserInput = useDebounce(userInput, 1000);
@@ -273,17 +282,12 @@ export const MagicCreatorDashboard: React.FC<MagicCreatorDashboardProps> = ({ us
     }, [user]);
     
     useEffect(() => {
-        // BUG FIX & REFACTOR: This robustly handles AI analysis, including aborting
-        // previous requests to prevent race conditions that hid the cancel button.
-        
-        // 1. If input is too short, cancel any pending analysis and exit.
         if (debouncedUserInput.trim().length < 10) {
             analysisControllerRef.current?.abort();
             setIsAnalyzing(false);
             return;
         }
 
-        // 2. A new, valid analysis is starting. Abort the previous one and create a new controller.
         analysisControllerRef.current?.abort();
         const controller = new AbortController();
         analysisControllerRef.current = controller;
@@ -291,24 +295,19 @@ export const MagicCreatorDashboard: React.FC<MagicCreatorDashboardProps> = ({ us
         setIsAnalyzing(true);
         setError(null);
 
-        // 3. Run the analysis.
         analyzeInputForScaffolding(debouncedUserInput, controller.signal)
             .then(result => {
                 setScaffold(result);
                 setIsAnalyzing(false);
             })
             .catch(err => {
-                if (err.name === 'AbortError') {
-                    // This is an expected error when the user types again. Do nothing.
-                    // The new effect run will correctly manage the `isAnalyzing` state.
-                } else {
+                if (err.name !== 'AbortError') {
                     console.error("AI analysis error:", err);
                     setError("AI analysis failed. Please try a different input.");
-                    setIsAnalyzing(false); // Stop the spinner on a real error.
+                    setIsAnalyzing(false);
                 }
             });
 
-        // 4. Return a cleanup function to abort this specific request if the input changes again.
         return () => {
             controller.abort();
         };
@@ -317,14 +316,12 @@ export const MagicCreatorDashboard: React.FC<MagicCreatorDashboardProps> = ({ us
 
     const filteredCampaigns = useMemo(() => {
         if (selectedProjectId === '__CREATE_NEW__') {
-            // Reset campaign selection when switching back to "Create New Project"
             if (selectedCampaignId !== '__CREATE_NEW__') {
                 setSelectedCampaignId('__CREATE_NEW__');
             }
             return [];
         }
         const campaignsForProject = campaigns.filter(c => c.projectId === selectedProjectId);
-        // If the currently selected campaign doesn't belong to the new project, reset it
         if (!campaignsForProject.some(c => c.id === selectedCampaignId)) {
             setSelectedCampaignId('__CREATE_NEW__');
         }
@@ -358,8 +355,14 @@ export const MagicCreatorDashboard: React.FC<MagicCreatorDashboardProps> = ({ us
         setGenerationSteps([]);
         setError(null);
     }, []);
+
+    const handleCancelGeneration = useCallback(() => {
+        if (generationTask?.id) {
+            cancelGeneration(generationTask.id);
+        }
+        handleReset();
+    }, [generationTask, cancelGeneration, handleReset]);
     
-    // REFACTOR: Extracted setup logic into helper functions for clarity in `handleGenerate`.
     const setupProject = async (userId: string, selectedId: string, newName: string) => {
         if (selectedId !== '__CREATE_NEW__') return selectedId;
         updateStepStatus('project', 'running');
@@ -450,7 +453,7 @@ export const MagicCreatorDashboard: React.FC<MagicCreatorDashboardProps> = ({ us
     }
     
     if (viewState === 'generating') {
-        return <GenerationProgress steps={generationSteps} taskProgress={generationTask?.progress || 0} taskMessage={generationTask?.message || ''} />;
+        return <GenerationProgress steps={generationSteps} taskProgress={generationTask?.progress || 0} taskMessage={generationTask?.message || ''} onCancel={handleCancelGeneration} />;
     }
 
     if (viewState === 'complete' && generationResult) {
