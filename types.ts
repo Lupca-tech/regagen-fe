@@ -1,4 +1,4 @@
-export type View = 'creator' | 'projects' | 'brandVoice' | 'account';
+export type View = 'magicCreator' | 'projects' | 'brandVoice' | 'account';
 
 export type EditablePlatform = 'web' | 'facebook' | 'linkedin' | 'x' | 'tiktok' | 'youtube';
 

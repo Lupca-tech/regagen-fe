@@ -1,9 +1,9 @@
 
-import React from 'react';
+import React, { useState } from 'react';
 import { Project, Campaign, Topic } from '../../types';
 import type { ProjectWithCampaigns } from '../ProjectsDashboard';
 import { useGeneration } from '../../contexts/GenerationContext';
-import { EditIcon, DeleteIcon, SparkleIcon, SkeletonItem } from '../Icons';
+import { EditIcon, DeleteIcon, SparkleIcon, SkeletonItem, ChevronDownIcon } from '../Icons';
 
 type ModalType = 'project' | 'campaign' | 'topic';
 
@@ -53,6 +53,12 @@ const TopicItem: React.FC<{ topic: Topic; isSelected: boolean; onSelect: () => v
 export const ProjectListView: React.FC<ProjectListViewProps> = ({
     isLoading, data, searchQuery, activeTopic, onSelectTopic, onOpenModal, onDelete, onSetGenerationModalTopic
 }) => {
+    const [expandedItems, setExpandedItems] = useState<Record<string, boolean>>({});
+
+    const toggleExpanded = (id: string) => {
+        setExpandedItems(prev => ({ ...prev, [id]: !prev[id] }));
+    };
+
     return (
         <div className="bg-zinc-950/70 p-4 rounded-xl border border-zinc-800 animate-fade-in-fast min-h-[60vh]">
             {isLoading ? (
@@ -61,43 +67,63 @@ export const ProjectListView: React.FC<ProjectListViewProps> = ({
                 <div className="text-center text-zinc-500 text-sm py-12">{searchQuery ? 'No results found.' : 'Create a project to get started.'}</div>
             ) : (
                 <div className="space-y-1">
-                    {data.map(project => (
-                        <div key={project.id}>
-                            <div className="group relative flex justify-between items-center p-2 rounded-md hover:bg-zinc-800/50">
-                                <div className="font-bold text-zinc-200">{project.name}</div>
-                                <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                   <button onClick={() => onOpenModal('project', 'edit', project)} className="p-1.5 text-zinc-400 hover:text-white hover:bg-zinc-700 rounded-md"><EditIcon /></button>
-                                   <button onClick={() => onDelete('project', project)} className="p-1.5 text-zinc-400 hover:text-red-400 hover:bg-red-500/10 rounded-md"><DeleteIcon /></button>
-                               </div>
+                    {data.map(project => {
+                        const isProjectExpanded = !!expandedItems[project.id];
+                        return (
+                            <div key={project.id}>
+                                <div className="group relative flex justify-between items-center p-2 rounded-md hover:bg-zinc-800/50">
+                                    <button onClick={() => toggleExpanded(project.id)} className="flex items-center gap-2 text-left flex-grow min-w-0">
+                                        <ChevronDownIcon className={`w-4 h-4 text-zinc-500 transition-transform flex-shrink-0 ${isProjectExpanded ? 'rotate-0' : '-rotate-90'}`} />
+                                        <span className="font-bold text-zinc-200 truncate">{project.name}</span>
+                                    </button>
+                                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                       <button onClick={() => onOpenModal('project', 'edit', project)} className="p-1.5 text-zinc-400 hover:text-white hover:bg-zinc-700 rounded-md"><EditIcon /></button>
+                                       <button onClick={() => onDelete('project', project)} className="p-1.5 text-zinc-400 hover:text-red-400 hover:bg-red-500/10 rounded-md"><DeleteIcon /></button>
+                                   </div>
+                                </div>
+                                {isProjectExpanded && (
+                                    <div className="pl-4 border-l-2 border-zinc-800 ml-4 animate-fade-in-fast">
+                                        {project.campaigns.length > 0 ? project.campaigns.map(campaign => {
+                                            const isCampaignExpanded = !!expandedItems[campaign.id];
+                                            return (
+                                               <div key={campaign.id} className="pl-4">
+                                                    <div className="group relative flex justify-between items-center p-2 rounded-md hover:bg-zinc-800/50">
+                                                       <button onClick={() => toggleExpanded(campaign.id)} className="flex items-center gap-2 text-left flex-grow min-w-0">
+                                                            <ChevronDownIcon className={`w-4 h-4 text-zinc-500 transition-transform flex-shrink-0 ${isCampaignExpanded ? 'rotate-0' : '-rotate-90'}`} />
+                                                            <span className="text-zinc-300 truncate">{campaign.name}</span>
+                                                        </button>
+                                                       <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                           <button onClick={() => onOpenModal('campaign', 'edit', campaign)} className="p-1.5 text-zinc-400 hover:text-white hover:bg-zinc-700 rounded-md"><EditIcon /></button>
+                                                           <button onClick={() => onDelete('campaign', campaign)} className="p-1.5 text-zinc-400 hover:text-red-400 hover:bg-red-500/10 rounded-md"><DeleteIcon /></button>
+                                                       </div>
+                                                   </div>
+                                                   {isCampaignExpanded && (
+                                                       <div className="pl-4 space-y-2 py-1 border-l-2 border-zinc-800 ml-4 animate-fade-in-fast">
+                                                            {campaign.topics.length > 0 ? campaign.topics.map(topic => (
+                                                                <TopicItem 
+                                                                    key={topic.id}
+                                                                    topic={topic} 
+                                                                    isSelected={activeTopic?.id === topic.id} 
+                                                                    onSelect={() => onSelectTopic(topic)}
+                                                                    onEdit={() => onOpenModal('topic', 'edit', topic)}
+                                                                    onDelete={() => onDelete('topic', topic)}
+                                                                    onGenerate={() => onSetGenerationModalTopic(topic)}
+                                                                />
+                                                            )) : (
+                                                                <div className="px-3 py-2 text-xs text-zinc-500">No topics in this campaign.</div>
+                                                            )}
+                                                       </div>
+                                                   )}
+                                               </div>
+                                            )
+                                        }) : (
+                                            <div className="pl-6 py-2 text-xs text-zinc-500">No campaigns in this project.</div>
+                                        )}
+                                    </div>
+                                )}
                             </div>
-                            {project.campaigns.map(campaign => (
-                               <div key={campaign.id} className="pl-4">
-                                    <div className="group relative flex justify-between items-center p-2 rounded-md hover:bg-zinc-800/50">
-                                       <div className="text-zinc-300">{campaign.name}</div>
-                                       <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                           <button onClick={() => onOpenModal('campaign', 'edit', campaign)} className="p-1.5 text-zinc-400 hover:text-white hover:bg-zinc-700 rounded-md"><EditIcon /></button>
-                                           <button onClick={() => onDelete('campaign', campaign)} className="p-1.5 text-zinc-400 hover:text-red-400 hover:bg-red-500/10 rounded-md"><DeleteIcon /></button>
-                                       </div>
-                                   </div>
-                                   <div className="pl-4 space-y-2 py-1">
-                                        {campaign.topics.map(topic => (
-                                            <TopicItem 
-                                                key={topic.id}
-                                                topic={topic} 
-                                                isSelected={activeTopic?.id === topic.id} 
-                                                onSelect={() => onSelectTopic(topic)}
-                                                // Fix: Changed handler to match '() => void' type, removing unnecessary event handling.
-                                                onEdit={() => onOpenModal('topic', 'edit', topic)}
-                                                // Fix: Changed handler to match '() => void' type, removing unnecessary event handling.
-                                                onDelete={() => onDelete('topic', topic)}
-                                                onGenerate={() => onSetGenerationModalTopic(topic)}
-                                            />
-                                        ))}
-                                   </div>
-                               </div>
-                            ))}
-                        </div>
-                    ))}
+                        )
+                    })}
                 </div>
             )}
         </div>

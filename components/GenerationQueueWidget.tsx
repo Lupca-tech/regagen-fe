@@ -1,4 +1,7 @@
 
+
+
+
 import React from 'react';
 import { useGeneration, GenerationTask } from '../contexts/GenerationContext';
 import { SparkleIcon, CheckCircleIcon, ExclamationCircleIcon, XIcon } from './Icons';
@@ -48,28 +51,36 @@ const GenerationTaskItem: React.FC<{
 
 export const GenerationQueueWidget = () => {
     const { 
-        activeGenerations, 
-        activeTask, 
+        activeGenerations,
         isProgressModalVisible, 
         hideProgressModal, 
         showProgressModal,
         cancelGeneration
     } = useGeneration();
 
-    if (activeGenerations.length === 0) {
+    // The widget should only be aware of tasks that are NOT from the Magic Creator,
+    // as that component has its own inline progress UI.
+    const widgetTasks = activeGenerations.filter(
+        task => task.context.view !== 'magicCreator'
+    );
+
+    if (widgetTasks.length === 0) {
         return null;
     }
 
-    if (isProgressModalVisible) {
-        if (!activeTask) return null;
-        const otherTasks = activeGenerations.filter(t => t.id !== activeTask.id);
+    // The primary task to display in the modal is the first running/queued task from the widget's list.
+    const mainWidgetTask = widgetTasks.find(t => t.status === 'running') || widgetTasks.find(t => t.status === 'queued') || null;
 
-        const isTaskComplete = activeTask.status === 'success' || activeTask.status === 'error';
-        const modalTitle = activeTask.status === 'success' ? 'Generation Complete' :
-                           activeTask.status === 'error' ? 'Generation Failed' :
+    if (isProgressModalVisible) {
+        if (!mainWidgetTask) return null; // Modal might be visible but no relevant tasks to show.
+        const otherWidgetTasks = widgetTasks.filter(t => t.id !== mainWidgetTask.id);
+
+        const isTaskComplete = mainWidgetTask.status === 'success' || mainWidgetTask.status === 'error';
+        const modalTitle = mainWidgetTask.status === 'success' ? 'Generation Complete' :
+                           mainWidgetTask.status === 'error' ? 'Generation Failed' :
                            'Generation in Progress';
-        const modalMessage = activeTask.status === 'success' ? 'Your content has been created!' :
-                             activeTask.status === 'error' ? activeTask.message :
+        const modalMessage = mainWidgetTask.status === 'success' ? 'Your content has been created!' :
+                             mainWidgetTask.status === 'error' ? mainWidgetTask.message :
                              'Your content is being created...';
 
         return (
@@ -84,28 +95,28 @@ export const GenerationQueueWidget = () => {
                         {!isTaskComplete && (
                             <div>
                                 <p className="text-sm text-zinc-400 mb-2">Currently processing:</p>
-                                <GenerationTaskItem task={activeTask} onCancel={cancelGeneration} />
+                                <GenerationTaskItem task={mainWidgetTask} onCancel={cancelGeneration} />
                             </div>
                         )}
 
-                        {isTaskComplete && activeTask.generatedResult && (
+                        {isTaskComplete && mainWidgetTask.generatedResult && (
                             <div className="animate-fade-in">
-                                {activeTask.context.type === 'content' || activeTask.context.type === 'refineContent' ? (
+                                {mainWidgetTask.context.type === 'content' || mainWidgetTask.context.type === 'refineContent' ? (
                                     <>
-                                        <p className="text-sm text-zinc-400 mb-2 font-bold">Generated Content for "{activeTask.topicName}":</p>
+                                        <p className="text-sm text-zinc-400 mb-2 font-bold">Generated Content for "{mainWidgetTask.topicName}":</p>
                                         <ContentTabs
-                                            content={activeTask.generatedResult}
-                                            topic={activeTask.topicName}
-                                            language={activeTask.context.params.language || 'English'} // Assuming English if not specified
+                                            content={mainWidgetTask.generatedResult}
+                                            topic={mainWidgetTask.topicName}
+                                            language={mainWidgetTask.context.params.language || 'English'} // Assuming English if not specified
                                             onContentUpdate={() => {}} // Read-only in modal
                                             isReadOnly={true}
                                         />
                                     </>
-                                ) : activeTask.context.type === 'topics' && Array.isArray(activeTask.generatedResult) ? (
+                                ) : mainWidgetTask.context.type === 'topics' && Array.isArray(mainWidgetTask.generatedResult) ? (
                                     <>
-                                        <p className="text-sm text-zinc-400 mb-2 font-bold">Generated Topics for "{activeTask.topicName}":</p>
+                                        <p className="text-sm text-zinc-400 mb-2 font-bold">Generated Topics for "{mainWidgetTask.topicName}":</p>
                                         <ul className="list-disc list-inside space-y-1 text-zinc-300 ml-4">
-                                            {activeTask.generatedResult.map((topic: string, index: number) => (
+                                            {mainWidgetTask.generatedResult.map((topic: string, index: number) => (
                                                 <li key={index}>{topic}</li>
                                             ))}
                                         </ul>
@@ -114,11 +125,11 @@ export const GenerationQueueWidget = () => {
                             </div>
                         )}
 
-                        {otherTasks.length > 0 && (
+                        {otherWidgetTasks.length > 0 && (
                             <div>
                                 <p className="text-sm text-zinc-400 mb-2">In queue:</p>
                                 <div className="space-y-3">
-                                    {otherTasks.map(task => (
+                                    {otherWidgetTasks.map(task => (
                                         <GenerationTaskItem key={task.id} task={task} onCancel={cancelGeneration} />
                                     ))}
                                 </div>
@@ -144,11 +155,11 @@ export const GenerationQueueWidget = () => {
             <button 
                 onClick={showProgressModal} 
                 className="relative flex items-center justify-center w-14 h-14 bg-zinc-900 border-2 border-zinc-700 rounded-full shadow-lg hover:border-pink-500 transition-all duration-300"
-                aria-label={`Open generation queue, ${activeGenerations.length} items active`}
+                aria-label={`Open generation queue, ${widgetTasks.length} items active`}
             >
                 <SparkleIcon className="w-7 h-7 text-pink-400 animate-pulse" />
                 <span className="absolute -top-1 -right-1 flex items-center justify-center w-6 h-6 bg-pink-600 text-white text-xs font-bold rounded-full border-2 border-zinc-900">
-                    {activeGenerations.length}
+                    {widgetTasks.length}
                 </span>
             </button>
         </div>

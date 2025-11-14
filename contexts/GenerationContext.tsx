@@ -1,25 +1,39 @@
 
+
+
+
+
 import React, { createContext, useContext, useState, useCallback, useEffect, useRef } from 'react';
 import { generateContentFlow, generateTopicsAI, regeneratePlatformContent } from '../services/geminiService';
 import { saveGeneratedContent, addMultipleTopics } from '../services/firebaseService';
-import type { GeneratedContent, Topic, BrandVoiceProfile, EditablePlatform } from '../types';
+import type { GeneratedContent, Topic, BrandVoiceProfile, EditablePlatform, Project, Campaign } from '../types';
+import type { User } from 'firebase/auth';
 
 export interface GenerationTask {
     id: string;
     topicName: string;
-    status: 'queued' | 'running' | 'success' | 'error';
+    status: 'queued' | 'running' | 'success' | 'error' | 'cancelled'; // Added 'cancelled'
     progress: number;
     message: string;
     generatedResult?: any; // To store the actual generated content/topics
     context: {
         type: 'content' | 'topics' | 'refineContent';
-        view: 'creator' | 'dashboard';
+        // Fix: Added 'magicCreator' to the view type to support the Magic Creator dashboard.
+        view: 'creator' | 'dashboard' | 'magicCreator';
         params: {
-            topic: string | Topic; // Can be string for creator, or Topic object for dashboard
+            // Fix: Made 'topic' optional as it's not required for 'topics' generation tasks.
+            topic?: string | Topic; // Can be string for creator, or Topic object for dashboard
             language?: string;
             shouldGenerateImage?: boolean;
             selectedPlatforms?: Set<EditablePlatform>;
-            brandVoiceProfile?: Omit<BrandVoiceProfile, 'id' | 'userId' | 'createdAt' | 'name'>;
+            // Fix: Replaced 'brandVoiceProfile' with a unified 'generationContext' object.
+            generationContext?: {
+                user?: User;
+                projects?: Project[];
+                campaigns?: Campaign[];
+                // Fix: Updated type to include 'name' as it's required by the generation service.
+                brandVoiceProfile?: Omit<BrandVoiceProfile, 'id' | 'userId' | 'createdAt'> & { name: string };
+            };
             userId?: string; // For dashboard view
             project?: any; // For topics generation
             campaign?: any; // For topics generation
@@ -46,148 +60,208 @@ interface GenerationContextType {
 
 const GenerationContext = createContext<GenerationContextType | undefined>(undefined);
 
-export const GenerationProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-    const [tasks, setTasks] = useState<GenerationTask[]>([]);
-    const [isProgressModalVisible, setIsProgressModalVisible] = useState(false);
-    const cancelledTaskIds = useRef(new Set<string>());
-
-    const showProgressModal = useCallback(() => setIsProgressModalVisible(true), []);
-    const hideProgressModal = useCallback(() => setIsProgressModalVisible(false), []);
-
-    const updateTask = useCallback((id: string, updates: Partial<GenerationTask>) => {
-        setTasks(prevTasks =>
-            prevTasks.map(task => (task.id === id ? { ...task, ...updates } : task))
-        );
-    }, []);
-
-    const removeTask = useCallback((id: string) => {
-        setTimeout(() => {
-            setTasks(prevTasks => prevTasks.filter(task => task.id !== id));
-        }, 5000);
-    }, []);
-    
-    useEffect(() => {
-        if (tasks.length === 0) {
-            hideProgressModal();
-        }
-    }, [tasks, hideProgressModal]);
-
-    const processTask = useCallback(async (task: GenerationTask) => {
-        updateTask(task.id, { status: 'running', progress: 5, message: 'Initializing...' });
-
-        const onProgress = (progress: number, message: string) => {
-            if (cancelledTaskIds.current.has(task.id)) return;
-            updateTask(task.id, { progress, message });
-        };
-        
-        try {
-            if (cancelledTaskIds.current.has(task.id)) return;
-            
-            let result: any;
-            let generatedContentResult: GeneratedContent | string[] | any; // Unified variable for generated result
-
-            if (task.context.type === 'topics') {
-                const { project, campaign, count, userId } = task.context.params;
-                onProgress(20, 'Brainstorming ideas...');
-                const generatedTopics = await generateTopicsAI(project!, campaign!, count!);
-                if (cancelledTaskIds.current.has(task.id)) return;
-
-                onProgress(80, 'Saving new topics...');
-                const topicsToAdd = generatedTopics.map(name => ({ name }));
-                await addMultipleTopics(topicsToAdd, userId!, project!.id, campaign!.id);
-                generatedContentResult = generatedTopics;
-
-            } else if (task.context.type === 'content') { // Main content generation
-                const { topic, language, shouldGenerateImage, selectedPlatforms, brandVoiceProfile } = task.context.params;
-                const topicName = task.context.view === 'dashboard' ? (topic as Topic).name : (topic as string);
-                result = await generateContentFlow(topicName, language!, shouldGenerateImage!, selectedPlatforms!, onProgress, brandVoiceProfile);
-                
-                if (cancelledTaskIds.current.has(task.id)) return;
-
-                if (task.context.view === 'dashboard') {
-                     const { topic: topicObject, userId } = task.context.params;
-                     onProgress(98, "Saving to database...");
-                     const generationContext = { projectId: (topicObject as Topic).projectId, campaignId: (topicObject as Topic).campaignId, topicId: (topicObject as Topic).id };
-                     await saveGeneratedContent(userId!, (topicObject as Topic).name, language!, result, generationContext);
-                }
-                generatedContentResult = result;
-
-            } else if (task.context.type === 'refineContent') { // Platform specific refinement
-                const { platform, topic, language, currentContent, userPrompt } = task.context.params;
-                onProgress(20, `Refining ${platform} content...`);
-                result = await regeneratePlatformContent(platform!, topic as string, currentContent!, userPrompt!, language!);
-                if (cancelledTaskIds.current.has(task.id)) return;
-                generatedContentResult = result;
-            }
-
-            if (cancelledTaskIds.current.has(task.id)) return;
-
-            updateTask(task.id, { status: 'success', progress: 100, message: 'Completed!', generatedResult: generatedContentResult });
-            
-            // Call onSuccess with result and platform for refineContent tasks
-            if (task.context.type === 'refineContent' && task.context.params.platform) {
-                task.context.onSuccess?.(generatedContentResult, task.context.params.platform);
-            } else {
-                task.context.onSuccess?.(generatedContentResult);
-            }
-            
-            removeTask(task.id);
-
-        } catch (e: any) {
-             if (cancelledTaskIds.current.has(task.id)) return;
-            console.error(`Generation failed for task ${task.id}:`, e);
-            updateTask(task.id, { status: 'error', progress: 100, message: e.message || 'An unknown error occurred.' });
-            removeTask(task.id);
-        } finally {
-            cancelledTaskIds.current.delete(task.id);
-        }
-    }, [updateTask, removeTask]);
-
-    useEffect(() => {
-        const runningTasks = tasks.filter(t => t.status === 'running').length;
-        const queuedTask = tasks.find(t => t.status === 'queued');
-        
-        if (runningTasks === 0 && queuedTask) {
-            processTask(queuedTask);
-        }
-    }, [tasks, processTask]);
-
-
-    const startGeneration = (task: GenerationTask) => {
-        setTasks(prevTasks => {
-            if (prevTasks.some(t => t.id === task.id)) return prevTasks;
-            return [...prevTasks, task];
-        });
-        showProgressModal();
-    };
-
-    const cancelGeneration = useCallback((taskId: string) => {
-        cancelledTaskIds.current.add(taskId);
-        setTasks(prevTasks => prevTasks.filter(task => task.id !== taskId));
-    }, []);
-
-    // Active task is the one currently running, or the first queued, or the first in list if any are complete/error
-    const activeTask = tasks.find(t => t.status === 'running') || tasks.find(t => t.status === 'queued') || tasks[0] || null;
-
-    return (
-        <GenerationContext.Provider value={{ 
-            activeGenerations: tasks, 
-            startGeneration,
-            cancelGeneration,
-            isProgressModalVisible,
-            showProgressModal,
-            hideProgressModal,
-            activeTask
-        }}>
-            {children}
-        </GenerationContext.Provider>
-    );
-};
-
 export const useGeneration = () => {
     const context = useContext(GenerationContext);
     if (context === undefined) {
         throw new Error('useGeneration must be used within a GenerationProvider');
     }
     return context;
+};
+
+export const GenerationProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+    const [tasks, setTasks] = useState<GenerationTask[]>([]);
+    const [isProgressModalVisible, setIsProgressModalVisible] = useState(false);
+    const [activeGenerationId, setActiveGenerationId] = useState<string | null>(null);
+    const activeController = useRef<AbortController | null>(null); // To handle API call cancellation
+
+    const updateTask = useCallback((taskId: string, updates: Partial<GenerationTask>) => {
+        setTasks(prevTasks =>
+            prevTasks.map(task => (task.id === taskId ? { ...task, ...updates } : task))
+        );
+    }, []);
+
+    const startGeneration = useCallback((newTask: GenerationTask) => {
+        setTasks(prevTasks => {
+            // Prevent adding duplicate tasks if one is already queued or running
+            if (prevTasks.some(t => t.id === newTask.id && (t.status === 'queued' || t.status === 'running'))) {
+                console.warn(`Task with ID ${newTask.id} is already in the queue or running.`);
+                return prevTasks;
+            }
+            // Add task to the queue
+            return [...prevTasks, { ...newTask, status: 'queued', progress: 0, message: 'Queued...' }];
+        });
+        
+        // Show the modal automatically only for tasks that are not from the magic creator,
+        // as it has its own inline progress display.
+        if (newTask.context.view !== 'magicCreator') {
+            if (!isProgressModalVisible) {
+                setIsProgressModalVisible(true);
+            }
+        }
+    }, [isProgressModalVisible]);
+
+    const cancelGeneration = useCallback((taskId: string) => {
+        setTasks(prevTasks => {
+            const taskToCancel = prevTasks.find(t => t.id === taskId);
+            if (!taskToCancel || (taskToCancel.status !== 'running' && taskToCancel.status !== 'queued')) {
+                return prevTasks; // Task not found or not in a cancellable state
+            }
+
+            // If the task is currently active, abort the API call
+            if (activeGenerationId === taskId && activeController.current) {
+                activeController.current.abort();
+                activeController.current = null; // Clear the controller
+            }
+
+            // Fix: Rewrote map to use a block body to prevent TypeScript from incorrectly widening the 'status' literal type to 'string'.
+            // Update status and filter out the cancelled task immediately
+            return prevTasks.map((task): GenerationTask => {
+                if (task.id === taskId) {
+                    return { ...task, status: 'cancelled', message: 'Cancelled by user.' };
+                }
+                return task;
+            }).filter(task => task.id !== taskId); // Remove cancelled tasks from the list immediately
+        });
+    }, [activeGenerationId]);
+
+    const showProgressModal = useCallback(() => setIsProgressModalVisible(true), []);
+    const hideProgressModal = useCallback(() => {
+        setIsProgressModalVisible(false);
+        // Clean up all completed, error, or cancelled tasks when modal is hidden
+        setTasks(prevTasks => prevTasks.filter(task => task.status === 'running' || task.status === 'queued'));
+    }, []);
+
+    // Effect to process the generation queue
+    useEffect(() => {
+        // Find the next queued task
+        const nextQueuedTask = tasks.find(t => t.status === 'queued');
+
+        // If there's a queued task and no task is currently active, start processing it
+        if (nextQueuedTask && !activeGenerationId) {
+            setActiveGenerationId(nextQueuedTask.id); // Mark this task as active
+
+            const controller = new AbortController();
+            activeController.current = controller; // Store the controller to allow cancellation
+
+            const executeTask = async () => {
+                // Update the task status to 'running'
+                updateTask(nextQueuedTask.id, { status: 'running', message: 'Starting process...' });
+
+                // Callback for progress updates from Gemini service
+                const onProgressCallback = (progress: number, message: string) => {
+                    updateTask(nextQueuedTask.id, { progress, message });
+                };
+
+                try {
+                    let result;
+                    // --- Content Generation (main article, social posts, image) ---
+                    if (nextQueuedTask.context.type === 'content') {
+                        const { topic, language, shouldGenerateImage, selectedPlatforms, generationContext } = nextQueuedTask.context.params;
+                        
+                        if (!topic) {
+                           throw new Error("Missing 'topic' for content generation task.");
+                        }
+
+                        // Ensure topic is a string for the Gemini service call
+                        const topicNameString = typeof topic === 'string' ? topic : (topic as Topic).name;
+                        
+                        // Fix: Pass the unified 'generationContext' object to the generation flow.
+                        result = await generateContentFlow(
+                            topicNameString,
+                            language || 'English', // Default language if not provided
+                            shouldGenerateImage || false,
+                            selectedPlatforms || new Set(),
+                            onProgressCallback,
+                            generationContext,
+                        );
+
+                        // Save generated content to Firebase if it's from the dashboard view
+                        if (nextQueuedTask.context.view === 'dashboard' && nextQueuedTask.context.params.userId) {
+                            const { userId, project, campaign } = nextQueuedTask.context.params;
+                            const topicObj = topic as Topic; // Assume it's a Topic object for dashboard view
+                            if (userId && topicObj.id && project?.id && campaign?.id) {
+                                await saveGeneratedContent(userId, topicObj.name, language || 'English', result, {
+                                    projectId: project.id,
+                                    campaignId: campaign.id,
+                                    topicId: topicObj.id,
+                                });
+                            } else {
+                                console.warn("Missing necessary IDs for saving content from dashboard view.");
+                            }
+                        }
+                    } 
+                    // --- Topic Generation (AI suggestions for new topics) ---
+                    else if (nextQueuedTask.context.type === 'topics') {
+                        const { project, campaign, count, userId } = nextQueuedTask.context.params;
+                        if (!project || !campaign || !count || !userId) {
+                            throw new Error("Missing parameters for topics generation.");
+                        }
+                        const topicsArray = await generateTopicsAI(project, campaign, count);
+                        result = topicsArray; // Store the array of topic names
+                        await addMultipleTopics(result.map((name: string) => ({ name })), userId, project.id, campaign.id);
+                    } 
+                    // --- Content Refinement (re-writing specific platform content) ---
+                    else if (nextQueuedTask.context.type === 'refineContent') {
+                        const { platform, topic, currentContent, userPrompt, language } = nextQueuedTask.context.params;
+                        if (!platform || !topic || !currentContent || !userPrompt || !language) {
+                            throw new Error("Missing parameters for content refinement.");
+                        }
+                        const topicNameString = typeof topic === 'string' ? topic : (topic as Topic).name;
+                        result = await regeneratePlatformContent(platform, topicNameString, currentContent, userPrompt, language);
+                    }
+                    
+                    // Check if the task was aborted during processing
+                    if (controller.signal.aborted) {
+                        updateTask(nextQueuedTask.id, { status: 'cancelled', message: 'Task cancelled.' });
+                    } else {
+                        // Task completed successfully
+                        updateTask(nextQueuedTask.id, { status: 'success', message: 'Generation complete!', progress: 100, generatedResult: result });
+                        // Call the success callback provided in the task context
+                        if (nextQueuedTask.context.onSuccess) {
+                            if (nextQueuedTask.context.type === 'refineContent' && nextQueuedTask.context.params.platform) {
+                                nextQueuedTask.context.onSuccess(result, nextQueuedTask.context.params.platform);
+                            } else {
+                                nextQueuedTask.context.onSuccess(result);
+                            }
+                        }
+                    }
+                } catch (e: any) {
+                    if (e.name === 'AbortError') {
+                        updateTask(nextQueuedTask.id, { status: 'cancelled', message: 'Generation cancelled.' });
+                    } else {
+                        console.error(`Error during generation for task ${nextQueuedTask.id}:`, e);
+                        updateTask(nextQueuedTask.id, { status: 'error', message: e.message || 'An unexpected error occurred.', progress: nextQueuedTask.progress || 0 });
+                    }
+                } finally {
+                    // Reset active task state after completion, error, or cancellation
+                    setActiveGenerationId(null);
+                    activeController.current = null;
+                }
+            };
+            executeTask();
+        }
+    }, [tasks, activeGenerationId, updateTask, cancelGeneration]);
+
+    // Filter active tasks (queued, running, success, error) for display
+    const activeGenerations = tasks.filter(
+        task => ['queued', 'running', 'success', 'error'].includes(task.status)
+    );
+    // Determine the primary active task for the modal (running first, then first queued)
+    const activeTask = activeGenerations.find(t => t.status === 'running') || activeGenerations.find(t => t.status === 'queued') || null;
+
+    const contextValue = {
+        activeGenerations,
+        startGeneration,
+        cancelGeneration,
+        isProgressModalVisible,
+        showProgressModal,
+        hideProgressModal,
+        activeTask,
+    };
+
+    return (
+        <GenerationContext.Provider value={contextValue}>
+            {children}
+        </GenerationContext.Provider>
+    );
 };

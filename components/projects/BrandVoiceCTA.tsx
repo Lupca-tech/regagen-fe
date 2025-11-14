@@ -1,5 +1,5 @@
 
-import React from 'react';
+import React, { useState } from 'react';
 import type { View } from '../../types';
 import { SparkleIcon, CloseIcon } from '../Icons';
 

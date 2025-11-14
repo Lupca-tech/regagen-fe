@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { User, getProjects, addProject, updateProject, deleteProject, getCampaigns, addCampaign, updateCampaign, deleteCampaign, getTopics, addTopic, updateTopic, deleteTopic, getContentById, getBrandVoiceProfiles } from '../services/firebaseService';
-import { Project, Campaign, Topic, SavedContent, BrandVoiceProfile, View } from '../types';
+import { Project, Campaign, Topic, SavedContent, BrandVoiceProfile, View, EditablePlatform } from '../types';
 import { ContentTabs } from './ContentTabs';
 import { useGeneration } from '../contexts/GenerationContext';
 import { SearchIcon, BoardViewIcon, ListViewIcon, BackIcon, SkeletonItem } from './Icons';
@@ -44,7 +44,7 @@ export const ProjectsDashboard: React.FC<ProjectsDashboardProps> = ({ user, onNa
     const [campaigns, setCampaigns] = useState<Campaign[]>([]);
     const [topics, setTopics] = useState<Topic[]>([]);
     const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
-    const [selectedCampaignId, setSelectedCampaignId] = useState<string | null>(null);
+    const [selectedCampaignId, setSelectedCampaignId] = useState<string | null>(selectedProjectId ? null : null); // Reset on project change
     
     // List view state
     const [listData, setListData] = useState<ProjectWithCampaigns[]>([]);
@@ -88,12 +88,18 @@ export const ProjectsDashboard: React.FC<ProjectsDashboardProps> = ({ user, onNa
         try {
             const userProjects = await getProjects(user.uid);
             setProjects(userProjects);
+            // If selectedProjectId is no longer valid, reset it
+            if (selectedProjectId && !userProjects.some(p => p.id === selectedProjectId)) {
+                setSelectedProjectId(null);
+                setCampaigns([]);
+                setTopics([]);
+            }
         } catch (e: any) { 
             setError(e.message || "Failed to load projects."); 
         } finally { 
             setLoading(prev => ({ ...prev, projects: false })); 
         }
-    }, [user.uid]);
+    }, [user.uid, selectedProjectId]);
 
     const fetchCampaigns = useCallback(async (projectId: string) => {
         setLoading(prev => ({ ...prev, campaigns: true }));
@@ -101,12 +107,17 @@ export const ProjectsDashboard: React.FC<ProjectsDashboardProps> = ({ user, onNa
         try {
             const projectCampaigns = await getCampaigns(projectId, user.uid);
             setCampaigns(projectCampaigns);
+            // If selectedCampaignId is no longer valid, reset it
+            if (selectedCampaignId && !projectCampaigns.some(c => c.id === selectedCampaignId)) {
+                setSelectedCampaignId(null);
+                setTopics([]);
+            }
         } catch (e: any) { 
             setError(e.message || "Failed to load campaigns."); 
         } finally { 
             setLoading(prev => ({ ...prev, campaigns: false })); 
         }
-    }, [user.uid]);
+    }, [user.uid, selectedCampaignId]);
 
     const fetchTopics = useCallback(async (campaignId: string) => {
         setLoading(prev => ({ ...prev, topics: true }));
@@ -114,12 +125,17 @@ export const ProjectsDashboard: React.FC<ProjectsDashboardProps> = ({ user, onNa
         try {
             const campaignTopics = await getTopics(campaignId, user.uid);
             setTopics(campaignTopics);
+            // If activeTopic is no longer valid, reset it
+            if (activeTopic && !campaignTopics.some(t => t.id === activeTopic.id)) {
+                setActiveTopic(null);
+                setViewedContent(null);
+            }
         } catch (e: any) { 
             setError(e.message || "Failed to load topics."); 
         } finally { 
             setLoading(prev => ({ ...prev, topics: false })); 
         }
-    }, [user.uid]);
+    }, [user.uid, activeTopic]);
     
     const fetchAllDataForList = useCallback(async () => {
         setIsListLoading(true);
@@ -153,6 +169,30 @@ export const ProjectsDashboard: React.FC<ProjectsDashboardProps> = ({ user, onNa
             fetchAllDataForList();
         }
     }, [projectViewMode, fetchProjects, fetchAllDataForList]);
+
+    // Fetch campaigns when selectedProjectId changes
+    useEffect(() => {
+        if (selectedProjectId && projectViewMode === 'board') {
+            fetchCampaigns(selectedProjectId);
+        } else if (!selectedProjectId) {
+            setCampaigns([]);
+            setTopics([]);
+            setSelectedCampaignId(null);
+            setActiveTopic(null);
+            setViewedContent(null);
+        }
+    }, [selectedProjectId, projectViewMode, fetchCampaigns]);
+
+    // Fetch topics when selectedCampaignId changes
+    useEffect(() => {
+        if (selectedCampaignId && projectViewMode === 'board') {
+            fetchTopics(selectedCampaignId);
+        } else if (!selectedCampaignId) {
+            setTopics([]);
+            setActiveTopic(null);
+            setViewedContent(null);
+        }
+    }, [selectedCampaignId, projectViewMode, fetchTopics]);
     
     const filteredListData = useMemo(() => {
         if (!searchQuery) return listData;
@@ -181,21 +221,21 @@ export const ProjectsDashboard: React.FC<ProjectsDashboardProps> = ({ user, onNa
     // --- SELECTION & NAVIGATION HANDLERS ---
     const handleSelectProject = useCallback((projectId: string) => {
         setSelectedProjectId(projectId);
-        setSelectedCampaignId(null);
+        setSelectedCampaignId(null); // Reset campaign selection when project changes
         setActiveTopic(null);
         setViewedContent(null);
         setCampaigns([]);
         setTopics([]);
-        fetchCampaigns(projectId);
-    }, [fetchCampaigns]);
+        // fetchCampaigns will be triggered by useEffect
+    }, []);
 
     const handleSelectCampaign = useCallback((campaignId: string) => {
         setSelectedCampaignId(campaignId);
         setActiveTopic(null);
         setViewedContent(null);
         setTopics([]);
-        fetchTopics(campaignId);
-    }, [fetchTopics]);
+        // fetchTopics will be triggered by useEffect
+    }, []);
     
     const handleSelectTopic = useCallback((topic: Topic) => {
         setActiveTopic(topic);
@@ -234,6 +274,17 @@ export const ProjectsDashboard: React.FC<ProjectsDashboardProps> = ({ user, onNa
         setActiveTopic(null);
     }, []);
 
+    const handleUpdateViewedContent = useCallback((platform: EditablePlatform, newContent: any) => {
+        setViewedContent(prevContent => {
+            if (!prevContent) return null;
+            return {
+                ...prevContent,
+                [platform]: newContent,
+            };
+        });
+    }, []);
+
+
     // --- CRUD HANDLERS ---
     const openModal = useCallback((type: ModalType, mode: ModalMode, data?: Project | Campaign | Topic) => {
         setModal({ isOpen: true, type, mode, data });
@@ -242,8 +293,8 @@ export const ProjectsDashboard: React.FC<ProjectsDashboardProps> = ({ user, onNa
     const handleModalSubmit = useCallback(async (formData: { name: string, description: string }) => {
         if (!modal.type || !formData.name) return;
         
-        const selectedProject = projects.find(p => p.id === selectedProjectId);
-        const selectedCampaign = campaigns.find(c => c.id === selectedCampaignId);
+        const currentProject = projects.find(p => p.id === selectedProjectId);
+        const currentCampaign = campaigns.find(c => c.id === selectedCampaignId);
 
         try {
             if (modal.mode === 'add') {
@@ -252,10 +303,10 @@ export const ProjectsDashboard: React.FC<ProjectsDashboardProps> = ({ user, onNa
                         await addProject({ userId: user.uid, name: formData.name, description: formData.description });
                         break;
                     case 'campaign':
-                        if (selectedProject) await addCampaign({ userId: user.uid, projectId: selectedProject.id, name: formData.name, goal: formData.description });
+                        if (currentProject) await addCampaign({ userId: user.uid, projectId: currentProject.id, name: formData.name, goal: formData.description });
                         break;
                     case 'topic':
-                        if (selectedProject && selectedCampaign) await addTopic({ userId: user.uid, projectId: selectedProject.id, campaignId: selectedCampaign.id, name: formData.name });
+                        if (currentProject && currentCampaign) await addTopic({ userId: user.uid, projectId: currentProject.id, campaignId: currentCampaign.id, name: formData.name });
                         break;
                 }
             } else if (modal.data) {
@@ -272,11 +323,12 @@ export const ProjectsDashboard: React.FC<ProjectsDashboardProps> = ({ user, onNa
                  }
             }
             
-            if (projectViewMode === 'list') await fetchAllDataForList();
-            else {
+            if (projectViewMode === 'list') {
+                await fetchAllDataForList();
+            } else {
                  await fetchProjects();
-                 if(selectedProjectId) await fetchCampaigns(selectedProjectId);
-                 if(selectedCampaignId) await fetchTopics(selectedCampaignId);
+                 if(selectedProjectId) await fetchCampaigns(selectedProjectId); // Re-fetch only current selection
+                 if(selectedCampaignId) await fetchTopics(selectedCampaignId); // Re-fetch only current selection
             }
         } catch (e: any) {
             setError(e.message || `Failed to ${modal.mode} ${modal.type}.`);
@@ -306,19 +358,16 @@ export const ProjectsDashboard: React.FC<ProjectsDashboardProps> = ({ user, onNa
             if (projectViewMode === 'list') {
                 await fetchAllDataForList();
             } else {
-                switch (type) {
-                    case 'project':
-                        if (selectedProjectId === item.id) handleBackToProjects();
-                        await fetchProjects();
-                        break;
-                    case 'campaign':
-                        if (selectedCampaignId === item.id) handleBackToCampaigns();
-                        if (selectedProjectId) await fetchCampaigns(selectedProjectId);
-                        break;
-                    case 'topic':
-                        if (activeTopic?.id === item.id) handleBackToDashboard();
-                        if (selectedCampaignId) await fetchTopics(selectedCampaignId);
-                        break;
+                // Re-fetch only the necessary data based on deletion context
+                if (type === 'project') {
+                    if (selectedProjectId === item.id) handleBackToProjects(); // Nav back if deleted item was selected
+                    await fetchProjects();
+                } else if (type === 'campaign') {
+                    if (selectedCampaignId === item.id) handleBackToCampaigns(); // Nav back if deleted item was selected
+                    if (selectedProjectId) await fetchCampaigns(selectedProjectId);
+                } else if (type === 'topic') {
+                    if (activeTopic?.id === item.id) handleBackToDashboard(); // Nav back if deleted item was selected
+                    if (selectedCampaignId) await fetchTopics(selectedCampaignId);
                 }
             }
         } catch (e: any) {
@@ -354,8 +403,8 @@ export const ProjectsDashboard: React.FC<ProjectsDashboardProps> = ({ user, onNa
                             content={viewedContent}
                             topic={activeTopic.name}
                             language={viewedContent.language}
-                            onContentUpdate={() => {}}
-                            isReadOnly={true}
+                            onContentUpdate={handleUpdateViewedContent} // Use the new handler
+                            // isReadOnly={true} is removed to allow editing
                         />
                     )
                 }

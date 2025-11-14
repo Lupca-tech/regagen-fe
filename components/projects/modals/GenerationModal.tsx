@@ -1,4 +1,6 @@
 
+
+
 import React, { useState, useEffect, useCallback } from 'react';
 import { User, getBrandVoiceProfiles } from '../../../services/firebaseService';
 import { Topic, EditablePlatform, BrandVoiceProfile } from '../../../types';
@@ -11,6 +13,16 @@ interface GenerationModalProps {
     onClose: () => void;
     onGenerationSuccess: () => void;
 }
+
+const LANGUAGES = [
+    { code: 'English', name: 'English' },
+    { code: 'Spanish', name: 'Español' },
+    { code: 'French', name: 'Français' },
+    { code: 'German', name: 'Deutsch' },
+    { code: 'Japanese', name: '日本語' },
+    { code: 'Chinese', name: '中文' },
+    { code: 'Vietnamese', name: 'Tiếng Việt' },
+];
 
 const ALL_PLATFORMS: { id: EditablePlatform; name: string; icon: React.FC<{className?: string}> }[] = [
     { id: 'web', name: 'Web/SEO', icon: WebIcon },
@@ -27,7 +39,8 @@ export const GenerationModal: React.FC<GenerationModalProps> = ({ topic, user, o
     const [shouldGenerateImage, setShouldGenerateImage] = useState(true);
     const [brandVoiceProfiles, setBrandVoiceProfiles] = useState<BrandVoiceProfile[]>([]);
     const [selectedProfileId, setSelectedProfileId] = useState<string>('default');
-    
+    const [language, setLanguage] = useState('English'); // New state for language
+
     useEffect(() => {
         getBrandVoiceProfiles(user.uid).then(setBrandVoiceProfiles).catch(console.error);
     }, [user.uid]);
@@ -43,6 +56,7 @@ export const GenerationModal: React.FC<GenerationModalProps> = ({ topic, user, o
         
         const selectedProfile = brandVoiceProfiles.find(p => p.id === selectedProfileId);
 
+        // Fix: Pass parameters inside a unified 'generationContext' object.
         startGeneration({
             id: topic.id,
             topicName: topic.name,
@@ -55,17 +69,22 @@ export const GenerationModal: React.FC<GenerationModalProps> = ({ topic, user, o
                 params: {
                     topic,
                     userId: user.uid,
-                    language: 'English',
+                    language, // Pass selected language
                     shouldGenerateImage,
                     selectedPlatforms,
-                    brandVoiceProfile: selectedProfile
+                    generationContext: {
+                        user: user,
+                        brandVoiceProfile: selectedProfile,
+                    },
+                    project: { id: topic.projectId }, // Pass project and campaign for saving context
+                    campaign: { id: topic.campaignId },
                 },
                 onSuccess: onGenerationSuccess
             }
         });
         
         onClose();
-    }, [topic, user.uid, shouldGenerateImage, selectedPlatforms, brandVoiceProfiles, selectedProfileId, startGeneration, onClose, onGenerationSuccess]);
+    }, [topic, user, language, shouldGenerateImage, selectedPlatforms, brandVoiceProfiles, selectedProfileId, startGeneration, onClose, onGenerationSuccess]);
     
     return (
          <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in" onClick={onClose}>
@@ -75,23 +94,42 @@ export const GenerationModal: React.FC<GenerationModalProps> = ({ topic, user, o
                     Configure options for the topic: <span className="font-bold text-pink-400">{topic.name}</span>
                 </p>
                 <div className="space-y-6">
-                     <div className="relative w-full">
-                        <label htmlFor="brand-voice-select" className="block text-sm font-medium text-zinc-300 mb-1 text-center">Brand Voice Co-Pilot</label>
-                          <select
-                            id="brand-voice-select"
-                            value={selectedProfileId}
-                            onChange={(e) => setSelectedProfileId(e.target.value)}
-                            className="w-full max-w-sm mx-auto appearance-none px-4 py-2 bg-gray-900 border border-gray-600 rounded-lg focus:ring-2 focus:ring-pink-500 focus:outline-none transition-all duration-300"
-                            aria-label="Select Brand Voice Profile"
-                          >
-                            <option value="default">Default (None)</option>
-                            {brandVoiceProfiles.map((profile) => (
-                              <option key={profile.id} value={profile.id}>{profile.name}</option>
-                            ))}
-                          </select>
-                           <div className="pointer-events-none absolute inset-y-0 right-0 top-7 mx-auto max-w-sm flex items-center px-2 text-gray-400">
+                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div className="relative w-full">
+                            <label htmlFor="language-select" className="block text-sm font-medium text-zinc-300 mb-1 text-center">Language</label>
+                            <select
+                                id="language-select"
+                                value={language}
+                                onChange={(e) => setLanguage(e.target.value)}
+                                className="w-full appearance-none px-4 py-2 bg-gray-900 border border-gray-600 rounded-lg focus:ring-2 focus:ring-pink-500 focus:outline-none transition-all duration-300"
+                                aria-label="Select language"
+                            >
+                                {LANGUAGES.map((lang) => (
+                                    <option key={lang.code} value={lang.code}>{lang.name}</option>
+                                ))}
+                            </select>
+                            <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-400">
                                 <svg className="fill-current h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"><path d="M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 10.828 5.757 6.586 4.343 8z"/></svg>
                             </div>
+                        </div>
+                        <div className="relative w-full">
+                            <label htmlFor="brand-voice-select" className="block text-sm font-medium text-zinc-300 mb-1 text-center">Brand Voice Co-Pilot</label>
+                            <select
+                                id="brand-voice-select"
+                                value={selectedProfileId}
+                                onChange={(e) => setSelectedProfileId(e.target.value)}
+                                className="w-full appearance-none px-4 py-2 bg-gray-900 border border-gray-600 rounded-lg focus:ring-2 focus:ring-pink-500 focus:outline-none transition-all duration-300"
+                                aria-label="Select Brand Voice Profile"
+                            >
+                                <option value="default">Default (None)</option>
+                                {brandVoiceProfiles.map((profile) => (
+                                <option key={profile.id} value={profile.id}>{profile.name}</option>
+                                ))}
+                            </select>
+                            <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-400">
+                                <svg className="fill-current h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"><path d="M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 10.828 5.757 6.586 4.343 8z"/></svg>
+                            </div>
+                        </div>
                     </div>
                     <div>
                         <h3 className="text-center text-sm font-semibold text-zinc-300 mb-3">Choose Your Platforms</h3>

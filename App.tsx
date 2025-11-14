@@ -1,5 +1,4 @@
 
-
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 
 // Import services and types
@@ -8,7 +7,6 @@ import type { EditablePlatform, GeneratedContent, BrandVoiceProfile, View } from
 
 // Import components
 import { Header } from './components/Header';
-import { TopicForm } from './components/TopicForm';
 import { ContentTabs } from './components/ContentTabs';
 import { ProjectsDashboard } from './components/ProjectsDashboard';
 import { BrandVoiceDashboard } from './components/BrandVoiceDashboard';
@@ -16,10 +14,12 @@ import { AccountDashboard } from './components/AccountDashboard';
 import { GenerationProvider, useGeneration } from './contexts/GenerationContext';
 import { GenerationQueueWidget } from './components/GenerationQueueWidget';
 import { TrendIcon, AiIcon, RocketIcon } from './components/Icons';
+import { AuthModal } from './components/AuthModal';
+import { MagicCreatorDashboard } from './components/MagicCreatorDashboard';
 
 
 // Custom hook to handle scroll animations using Intersection Observer
-const useScrollAnimation = () => {
+const useScrollAnimation = (view: View) => {
   const animatedElementsRef = useRef<Set<Element>>(new Set());
 
   useEffect(() => {
@@ -41,7 +41,7 @@ const useScrollAnimation = () => {
     return () => {
       elements.forEach((el) => observer.unobserve(el));
     };
-  }, []);
+  }, [view]); // Re-run the animation setup whenever the view changes
 };
 
 // --- HELPER COMPONENTS ---
@@ -50,71 +50,40 @@ const NeonDivider: React.FC = () => (
 );
 
 const MainApp: React.FC = () => {
-    useScrollAnimation();
-    
     const [currentUser, setCurrentUser] = useState<User | null>(null);
-    const [view, setView] = useState<View>('creator');
-    const [topic, setTopic] = useState('');
-    const [language, setLanguage] = useState('English');
-    const [shouldGenerateImage, setShouldGenerateImage] = useState(true);
-    const [selectedPlatforms, setSelectedPlatforms] = useState<Set<EditablePlatform>>(
-        new Set(['web', 'facebook', 'tiktok'])
-    );
+    const [view, setView] = useState<View>('magicCreator');
+    const [topic, setTopic] = useState(''); // This might be deprecated or used differently
+    
+    useScrollAnimation(view); // Pass the current view to the hook
+
+    // Legacy states from old creator, might be removed or repurposed
     const [generatedContent, setGeneratedContent] = useState<GeneratedContent | null>(null);
     const contentRef = useRef<HTMLDivElement>(null);
     
-    const { startGeneration, activeGenerations } = useGeneration();
-    const mainGenerationTask = activeGenerations.find(g => g.context.view === 'creator' && g.context.type === 'content');
+    const { activeGenerations } = useGeneration();
+    const mainGenerationTask = activeGenerations.find(g => g.context.view === 'magicCreator' && g.context.type === 'content');
+
+    const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
 
 
     useEffect(() => {
         const unsubscribe = onAuthStateChangedListener((user) => {
             setCurrentUser(user);
-            setView(user ? 'projects' : 'creator');
+            setView(user ? 'projects' : 'magicCreator');
         });
         return unsubscribe;
     }, []);
     
-    const handleNavigate = useCallback((newView: View) => {
+    const handleNavigate = useCallback((newView: View, context?: any) => {
         setGeneratedContent(null);
-        if (newView === 'creator') {
+        if (newView === 'magicCreator') {
             setTopic('');
         }
+        // If navigating to projects after magic creation, we might need context
+        // For now, simple navigation
         setView(newView);
+        setIsAuthModalOpen(false); // Close auth modal on navigation
     }, []);
-
-    const handleGenerate = useCallback(async (brandVoiceProfile?: BrandVoiceProfile) => {
-        if (!topic.trim() || selectedPlatforms.size === 0) return;
-        
-        setGeneratedContent(null);
-
-        const generationId = `creator-${Date.now()}`;
-        startGeneration({
-            id: generationId,
-            topicName: topic,
-            status: 'queued',
-            progress: 0,
-            message: 'Starting generation...',
-            context: {
-                type: 'content',
-                view: 'creator',
-                params: {
-                    topic,
-                    language,
-                    shouldGenerateImage,
-                    selectedPlatforms,
-                    brandVoiceProfile,
-                },
-                onSuccess: (result: GeneratedContent) => {
-                    setGeneratedContent(result);
-                    setTimeout(() => {
-                        contentRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                    }, 100);
-                }
-            }
-        });
-        
-    }, [topic, language, shouldGenerateImage, selectedPlatforms, startGeneration]);
     
     const handleContentUpdate = useCallback((platform: EditablePlatform, newContent: any) => {
       setGeneratedContent(prevContent => {
@@ -150,9 +119,14 @@ const MainApp: React.FC = () => {
 
     return (
         <div className="bg-black text-[#EAEAEA] font-sans overflow-x-hidden">
-            <Header user={currentUser} onNavigate={handleNavigate} currentView={view} />
+            <Header
+                user={currentUser}
+                onNavigate={handleNavigate}
+                currentView={view}
+                onOpenAuthModal={() => setIsAuthModalOpen(true)}
+            />
             <main className="container mx-auto px-4 pt-24">
-                {view === 'creator' && (
+                {view === 'magicCreator' && (
                   <>
                     <section className="min-h-screen flex flex-col justify-center items-center text-center -mt-24">
                         <h1 className="text-5xl md:text-7xl font-black uppercase tracking-tighter scroll-animate">
@@ -163,30 +137,23 @@ const MainApp: React.FC = () => {
                         <p className="max-w-2xl mt-6 text-lg text-zinc-400 scroll-animate" style={{ transitionDelay: '100ms' }}>
                             RageGen scans the internet for trends, and writes viral-ready content for you in any language.
                         </p>
-                        <div className="mt-10 w-full max-w-3xl scroll-animate" style={{ transitionDelay: '200ms' }}>
-                            <TopicForm 
-                               topic={topic}
-                               setTopic={setTopic}
-                               language={language}
-                               setLanguage={setLanguage}
-                               shouldGenerateImage={shouldGenerateImage}
-                               setShouldGenerateImage={setShouldGenerateImage}
-                               selectedPlatforms={selectedPlatforms}
-                               setSelectedPlatforms={setSelectedPlatforms}
-                               onSubmit={handleGenerate}
-                               isLoading={!!mainGenerationTask}
-                               user={currentUser}
-                            />
+                        <div className="mt-10 w-full max-w-4xl scroll-animate" style={{ transitionDelay: '200ms' }}>
+                           <MagicCreatorDashboard 
+                                user={currentUser}
+                                onOpenAuthModal={() => setIsAuthModalOpen(true)}
+                                onGenerationComplete={(context) => handleNavigate('projects', context)}
+                           />
                         </div>
                     </section>
 
+                    {/* This section might be removed as Magic Creator redirects on completion */}
                     <div ref={contentRef} className="my-10 min-h-[100px]">
                         {generatedContent && !mainGenerationTask && (
                            <div className="animate-fade-in">
                              <ContentTabs 
                                 content={generatedContent} 
                                 topic={topic}
-                                language={language}
+                                language={"English"} // Needs to be dynamic
                                 onContentUpdate={handleContentUpdate}
                               />
                            </div>
@@ -229,6 +196,7 @@ const MainApp: React.FC = () => {
             <footer className="container mx-auto px-4 text-center py-8 text-zinc-500 border-t border-zinc-900 mt-20">
                 <p>&copy; {new Date().getFullYear()} RageGen. All rights reserved.</p>
             </footer>
+            <AuthModal isOpen={isAuthModalOpen} onClose={() => setIsAuthModalOpen(false)} />
         </div>
     );
 };

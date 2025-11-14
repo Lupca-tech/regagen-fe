@@ -1,5 +1,11 @@
+
+
+
+
 import { GoogleGenAI, Type, Modality } from "@google/genai";
-import type { GeneratedContent, EditablePlatform, BrandVoiceProfile } from '../types';
+import type { GeneratedContent, EditablePlatform, BrandVoiceProfile, Project, Campaign } from '../types';
+import type { User } from './firebaseService';
+
 
 if (!process.env.API_KEY) {
   throw new Error("API_KEY environment variable is not set.");
@@ -89,13 +95,21 @@ async function generateImage(prompt: string, onProgress: ProgressCallback): Prom
     }
 }
 
+// Fix: Made properties of FullGenerationContext optional to support partial context from different sources.
+interface FullGenerationContext {
+    user?: User;
+    projects?: Project[];
+    campaigns?: Campaign[];
+    brandVoiceProfile?: Omit<BrandVoiceProfile, 'id' | 'userId' | 'createdAt'>;
+}
+
 export const generateContentFlow = async (
   topic: string, 
   language: string, 
   shouldGenerateImage: boolean, 
   selectedPlatforms: Set<EditablePlatform>,
   onProgress: ProgressCallback = () => {},
-  brandVoiceProfile?: Omit<BrandVoiceProfile, 'id' | 'userId' | 'createdAt' | 'name'>
+  generationContext?: FullGenerationContext
 ): Promise<GeneratedContent> => {
   try {
     const properties: any = {
@@ -135,21 +149,35 @@ export const generateContentFlow = async (
     };
 
     let brandVoiceInstruction = '';
-    if (brandVoiceProfile) {
+    if (generationContext?.brandVoiceProfile) {
         brandVoiceInstruction = `
-        **CRITICAL: ADHERE TO THE BRAND VOICE PROFILE**
-        - **Tone & Manner:** ${brandVoiceProfile.toneAndManner}
-        - **Vocabulary Level:** ${brandVoiceProfile.vocabularyLevel}
-        - **Sentence Structure:** ${brandVoiceProfile.sentenceStructure}
+        **CRITICAL: ADHERE TO THE BRAND VOICE PROFILE: ${generationContext.brandVoiceProfile.name}**
+        - **Tone & Manner:** ${generationContext.brandVoiceProfile.toneAndManner}
+        - **Vocabulary Level:** ${generationContext.brandVoiceProfile.vocabularyLevel}
+        - **Sentence Structure:** ${generationContext.brandVoiceProfile.sentenceStructure}
         - **Rules to Follow (Do's):**
-          ${brandVoiceProfile.dos.map(rule => `- ${rule}`).join('\n')}
+          ${generationContext.brandVoiceProfile.dos.map(rule => `- ${rule}`).join('\n')}
         - **Things to Avoid (Don'ts):**
-          ${brandVoiceProfile.donts.map(rule => `- ${rule}`).join('\n')}
+          ${generationContext.brandVoiceProfile.donts.map(rule => `- ${rule}`).join('\n')}
+        `;
+    }
+
+    let ragContext = '';
+    if (generationContext) {
+        // Fix: Added optional chaining and nullish coalescing to prevent runtime errors if parts of the context are missing.
+        ragContext = `
+        **IMPORTANT CONTEXT TO PERSONALIZE CONTENT:**
+        - **User Profile:** The user's display name is "${generationContext.user?.displayName || 'N/A'}".
+        - **Existing Projects:** The user is working on these projects: ${generationContext.projects?.map(p => p.name).join(', ') || 'none'}.
+        - **Existing Campaigns:** The user has these active campaigns: ${generationContext.campaigns?.map(c => c.name).join(', ') || 'none'}.
+        - **Brand Voice:** ${brandVoiceInstruction || 'Use a default, engaging, and informative tone.'}
+
+        Use this context to ensure the generated content is highly relevant to the user's ongoing work and brand identity.
         `;
     }
 
     const systemInstruction = `You are a world-class content strategist and creation engine. Your task is to take a single topic and execute a multi-step content generation flow.
-    ${brandVoiceInstruction}
+    ${ragContext}
     1.  **Simulate Research (RAG Pre-computation):** First, act as a market research tool. For the given topic, internally brainstorm the top 3-5 trending keywords and imagine 2-3 highly-ranked articles.
     2.  **Core Generation (RAG Application):** Using this simulated research as your context, write a comprehensive, unique, and high-quality main blog post.
     3.  **Image Prompt Generation:** ${shouldGenerateImage ? "Based on the article, create a detailed, dynamic, and visually descriptive prompt suitable for a text-to-image AI like Imagen." : "Image generation is disabled by the user. Do not generate an image prompt."}
@@ -258,7 +286,7 @@ export const regeneratePlatformContent = async (
         }
 
         const response = await ai.models.generateContent({
-            model: "gemini-2.5-flash",
+            model: "gemini-2.5-pro",
             contents: prompt,
             config: {
                 systemInstruction,
@@ -381,5 +409,45 @@ export const generateTopicsAI = async (
             throw new Error(`Gemini API call failed during topic generation: ${error.message}`);
         }
         throw new Error("An unexpected error occurred during AI topic generation.");
+    }
+};
+
+
+export const analyzeInputForScaffolding = async (
+  userInput: string,
+  signal?: AbortSignal
+): Promise<{ projectName: string; campaignName: string; topicName: string; }> => {
+    try {
+        const schema = {
+            type: Type.OBJECT,
+            properties: {
+                projectName: { type: Type.STRING, description: "A short, high-level name for the overall project or content category. (e.g., 'EV Innovations 2024')." },
+                campaignName: { type: Type.STRING, description: "A name for a specific campaign or content series under the project. (e.g., 'Future of Batteries')." },
+                topicName: { type: Type.STRING, description: "A specific, article-like title for the content itself, derived from the input. (e.g., 'The Revolution of Solid-State Batteries in Electric Vehicles')." },
+            },
+            required: ["projectName", "campaignName", "topicName"]
+        };
+
+        const systemInstruction = `You are an expert content strategist. Your task is to analyze a user's input (which could be a simple topic, a full article, or a prompt) and extract a logical hierarchy for it. Based on the input, suggest a concise and relevant Project Name, Campaign Name, and Topic Name. The output must be a clean JSON object that adheres to the provided schema. Do not include any other text.`;
+        
+        const response = await ai.models.generateContent({
+            model: "gemini-2.5-flash",
+            contents: `Analyze the following input and generate a project, campaign, and topic name structure:\n\n---\n\n${userInput}`,
+            config: {
+                systemInstruction,
+                responseMimeType: "application/json",
+                responseSchema: schema,
+            },
+            signal,
+        });
+
+        return JSON.parse(response.text.trim());
+
+    } catch (error) {
+        if ((error as Error).name !== 'AbortError') {
+          console.error("Error analyzing input for scaffolding:", error);
+        }
+        // Re-throw the error so the component can handle it (e.g., ignore AbortError)
+        throw error;
     }
 };

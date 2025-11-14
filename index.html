@@ -43,6 +43,18 @@
         transform: translateY(0);
     }
     
+    /* Collapsible content animation */
+    .collapsible-content {
+      max-height: 0;
+      overflow: hidden;
+      transition: max-height 0.5s ease-in-out;
+      opacity: 0;
+    }
+    .collapsible-content.visible {
+      max-height: 1000px; /* A large enough value to not clip content */
+      opacity: 1;
+    }
+
     /* General fade-in animation */
     .animate-fade-in {
         animation: fadeIn 0.5s ease-out forwards;

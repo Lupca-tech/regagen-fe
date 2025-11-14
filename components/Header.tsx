@@ -2,14 +2,15 @@
 import React, { useState } from 'react';
 import { signOutUser } from '../services/firebaseService';
 import type { User } from 'firebase/auth';
-import { AuthModal } from './AuthModal';
+// import { AuthModal } from './AuthModal'; // REMOVE THIS IMPORT
 import type { View } from '../types';
-import { SignInIcon, CreatorIcon, ProjectsIcon, BrandVoiceIcon, AccountIcon, SignOutIcon, ChevronDownIcon } from './Icons';
+import { SignInIcon, MagicWandIcon, ProjectsIcon, BrandVoiceIcon, AccountIcon, SignOutIcon, ChevronDownIcon } from './Icons';
 
 interface HeaderProps {
     user: User | null;
     onNavigate: (view: View) => void;
     currentView: View;
+    onOpenAuthModal: () => void; // NEW PROP
 }
 
 const UserMenu: React.FC<{ user: User; onNavigate: (view: View) => void; currentView: View }> = React.memo(({ user, onNavigate, currentView }) => {
@@ -21,7 +22,7 @@ const UserMenu: React.FC<{ user: User; onNavigate: (view: View) => void; current
     };
 
     const menuItems: { view: View; label: string; icon: React.FC<{className?: string}> }[] = [
-        { view: 'creator', label: 'Creator', icon: CreatorIcon },
+        { view: 'magicCreator', label: 'Magic Creator', icon: MagicWandIcon },
         { view: 'projects', label: 'Projects', icon: ProjectsIcon },
         { view: 'brandVoice', label: 'Brand Voice', icon: BrandVoiceIcon },
         { view: 'account', label: 'My Account', icon: AccountIcon },
@@ -75,14 +76,15 @@ const UserMenu: React.FC<{ user: User; onNavigate: (view: View) => void; current
     );
 });
 
-export const Header: React.FC<HeaderProps> = ({ user, onNavigate, currentView }) => {
-    const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
+export const Header: React.FC<HeaderProps> = ({ user, onNavigate, currentView, onOpenAuthModal }) => {
+    // REMOVE isAuthModalOpen STATE
+    // const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
 
     return (
         <>
             <header className="fixed top-0 left-0 right-0 z-40 bg-black/50 backdrop-blur-md border-b border-zinc-900">
                 <div className="container mx-auto px-4 h-20 flex justify-between items-center">
-                    <button onClick={() => onNavigate(user ? 'projects' : 'creator')} className="text-2xl font-black uppercase tracking-tighter">
+                    <button onClick={() => onNavigate(user ? 'projects' : 'magicCreator')} className="text-2xl font-black uppercase tracking-tighter">
                         Rage<span className="text-pink-500">Gen</span>
                     </button>
 
@@ -91,7 +93,7 @@ export const Header: React.FC<HeaderProps> = ({ user, onNavigate, currentView })
                            <UserMenu user={user} onNavigate={onNavigate} currentView={currentView} />
                         ) : (
                             <button
-                                onClick={() => setIsAuthModalOpen(true)}
+                                onClick={onOpenAuthModal} // USE THE PROP HERE
                                 className="flex items-center justify-center px-4 py-2 font-semibold text-white bg-transparent border-2 border-pink-500 rounded-lg hover:bg-pink-500 transition-colors duration-300"
                             >
                                 <SignInIcon className="w-5 h-5 mr-2" />
@@ -101,7 +103,8 @@ export const Header: React.FC<HeaderProps> = ({ user, onNavigate, currentView })
                     </nav>
                 </div>
             </header>
-            <AuthModal isOpen={isAuthModalOpen} onClose={() => setIsAuthModalOpen(false)} />
+            {/* REMOVE AuthModal HERE */}
+            {/* <AuthModal isOpen={isAuthModalOpen} onClose={() => setIsAuthModalOpen(false)} /> */}
         </>
     );
 };
