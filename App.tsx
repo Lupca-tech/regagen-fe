@@ -1,4 +1,5 @@
 
+
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 
 // Import services and types
@@ -16,6 +17,7 @@ import { GenerationQueueWidget } from './components/GenerationQueueWidget';
 import { TrendIcon, AiIcon, RocketIcon } from './components/Icons';
 import { AuthModal } from './components/AuthModal';
 import { MagicCreatorDashboard } from './components/MagicCreatorDashboard';
+import { CalendarDashboard } from './components/CalendarDashboard';
 
 
 // Custom hook to handle scroll animations using Intersection Observer
@@ -53,6 +55,7 @@ const MainApp: React.FC = () => {
     const [currentUser, setCurrentUser] = useState<User | null>(null);
     const [view, setView] = useState<View>('magicCreator');
     const [topic, setTopic] = useState(''); // This might be deprecated or used differently
+    const [prefillTopic, setPrefillTopic] = useState<string | undefined>(undefined);
     
     useScrollAnimation(view); // Pass the current view to the hook
 
@@ -78,9 +81,13 @@ const MainApp: React.FC = () => {
         setGeneratedContent(null);
         if (newView === 'magicCreator') {
             setTopic('');
+            if (context?.prefillTopic) {
+                setPrefillTopic(context.prefillTopic);
+            }
+        } else {
+            setPrefillTopic(undefined); // Clear prefill when navigating away from magic creator
         }
-        // If navigating to projects after magic creation, we might need context
-        // For now, simple navigation
+        
         setView(newView);
         setIsAuthModalOpen(false); // Close auth modal on navigation
     }, []);
@@ -95,11 +102,12 @@ const MainApp: React.FC = () => {
       });
     }, []);
 
-    const isDashboardView = ['projects', 'brandVoice', 'account'].includes(view);
+    const isDashboardView = ['projects', 'brandVoice', 'account', 'calendar'].includes(view);
     const dashboardTitles: Record<string, string> = {
         projects: 'Content Dashboard',
         brandVoice: 'Brand Voice Co-Pilot',
-        account: 'My Account'
+        account: 'My Account',
+        calendar: 'Smart Content Calendar'
     };
     const currentDashboardTitle = dashboardTitles[view] || '';
 
@@ -112,6 +120,8 @@ const MainApp: React.FC = () => {
                 return <BrandVoiceDashboard user={currentUser} />;
             case 'account':
                 return <AccountDashboard user={currentUser} />;
+            case 'calendar':
+                return <CalendarDashboard user={currentUser} onNavigate={handleNavigate} />;
             default:
                 return null;
         }
@@ -142,6 +152,7 @@ const MainApp: React.FC = () => {
                                 user={currentUser}
                                 onOpenAuthModal={() => setIsAuthModalOpen(true)}
                                 onGenerationComplete={(context) => handleNavigate('projects', context)}
+                                prefillTopic={prefillTopic}
                            />
                         </div>
                     </section>

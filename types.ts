@@ -1,4 +1,4 @@
-export type View = 'magicCreator' | 'projects' | 'brandVoice' | 'account';
+export type View = 'magicCreator' | 'projects' | 'brandVoice' | 'account' | 'calendar';
 
 export type EditablePlatform = 'web' | 'facebook' | 'linkedin' | 'x' | 'tiktok' | 'youtube';
 
@@ -140,4 +140,21 @@ export interface BrandVoiceProfile {
   sentenceStructure: string;
   dos: string[];
   donts: string[];
+}
+
+// --- NEW TYPES FOR CALENDAR ---
+export interface CalendarSettings {
+    userId: string;
+    mainTopics: string;
+    targetAudience: string;
+}
+
+export interface CalendarEvent {
+    id: string;
+    userId: string;
+    title: string;
+    start: string; // ISO string for the date
+    status: 'suggested_trend' | 'suggested_event' | 'draft' | 'published';
+    type: 'trend' | 'event' | 'manual';
+    contentId?: string; // Link to the generated content
 }

@@ -1,9 +1,10 @@
 
 
+
 import React, { createContext, useContext, useState, useCallback, useEffect, useRef } from 'react';
-import { generateContentFlow, generateTopicsAI, regeneratePlatformContent, analyzePerformance } from '../services/geminiService';
-import { saveGeneratedContent, addMultipleTopics, updateContentAnalysis } from '../services/firebaseService';
-import type { GeneratedContent, Topic, BrandVoiceProfile, EditablePlatform, Project, Campaign, SavedContent } from '../types';
+import { generateContentFlow, generateTopicsAI, regeneratePlatformContent, analyzePerformance, generateCalendarSuggestions } from '../services/geminiService';
+import { saveGeneratedContent, addMultipleTopics, updateContentAnalysis, addCalendarEventsBatch } from '../services/firebaseService';
+import type { GeneratedContent, Topic, BrandVoiceProfile, EditablePlatform, Project, Campaign, SavedContent, CalendarSettings } from '../types';
 import type { User } from 'firebase/auth';
 
 export interface GenerationTask {
@@ -14,9 +15,9 @@ export interface GenerationTask {
     message: string;
     generatedResult?: any; // To store the actual generated content/topics
     context: {
-        type: 'content' | 'topics' | 'refineContent' | 'analyzeContent';
+        type: 'content' | 'topics' | 'refineContent' | 'analyzeContent' | 'calendarSuggestions';
         // Fix: Added 'magicCreator' to the view type to support the Magic Creator dashboard.
-        view: 'creator' | 'dashboard' | 'magicCreator';
+        view: 'creator' | 'dashboard' | 'magicCreator' | 'calendar';
         params: {
             // Fix: Made 'topic' optional as it's not required for 'topics' generation tasks.
             topic?: string | Topic; // Can be string for creator, or Topic object for dashboard
@@ -43,6 +44,10 @@ export interface GenerationTask {
 
             // For analyzeContent tasks
             content?: SavedContent;
+
+            // For calendarSuggestions tasks
+            calendarSettings?: CalendarSettings;
+            currentDate?: Date;
         };
         onSuccess?: (result?: any, platform?: EditablePlatform) => void;
     };
@@ -220,6 +225,24 @@ export const GenerationProvider: React.FC<{ children: React.ReactNode }> = ({ ch
                         result = await analyzePerformance(content, platformsToAnalyze);
                         onProgressCallback(75, 'Saving analysis...');
                         await updateContentAnalysis(content.id, result);
+                    }
+                     // --- Calendar Suggestions ---
+                    else if (nextQueuedTask.context.type === 'calendarSuggestions') {
+                        const { calendarSettings, currentDate, userId } = nextQueuedTask.context.params;
+                        if (!calendarSettings || !currentDate || !userId) {
+                            throw new Error("Missing parameters for calendar suggestion generation.");
+                        }
+                        onProgressCallback(25, 'Searching for trends and events...');
+                        result = await generateCalendarSuggestions(calendarSettings, currentDate);
+                        onProgressCallback(75, 'Populating calendar...');
+                        
+                        const eventsToAdd = result.map((suggestion: any) => ({
+                            title: suggestion.title,
+                            start: suggestion.date,
+                            status: suggestion.type === 'trend' ? 'suggested_trend' : 'suggested_event',
+                            type: suggestion.type,
+                        }));
+                        await addCalendarEventsBatch(userId, eventsToAdd);
                     }
                     
                     // Check if the task was aborted during processing

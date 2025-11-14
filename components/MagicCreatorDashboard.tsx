@@ -11,6 +11,7 @@ interface MagicCreatorDashboardProps {
     user: User | null;
     onOpenAuthModal: () => void;
     onGenerationComplete: (context: { projectId: string; campaignId: string; topicId: string }) => void;
+    prefillTopic?: string;
 }
 
 type GenerationStep = {
@@ -239,7 +240,7 @@ const AdvancedOptions: React.FC<any> = React.memo(({ showAdvanced, ...props }) =
 ));
 
 // --- MAIN COMPONENT ---
-export const MagicCreatorDashboard: React.FC<MagicCreatorDashboardProps> = ({ user, onOpenAuthModal, onGenerationComplete }) => {
+export const MagicCreatorDashboard: React.FC<MagicCreatorDashboardProps> = ({ user, onOpenAuthModal, onGenerationComplete, prefillTopic }) => {
     // --- STATE MANAGEMENT ---
     const [viewState, setViewState] = useState<ViewState>('input');
     const [userInput, setUserInput] = useState('');
@@ -267,6 +268,12 @@ export const MagicCreatorDashboard: React.FC<MagicCreatorDashboardProps> = ({ us
     const analysisControllerRef = useRef<AbortController | null>(null);
 
     // --- DATA FETCHING & ANALYSIS ---
+    useEffect(() => {
+        if (prefillTopic) {
+            setUserInput(prefillTopic);
+        }
+    }, [prefillTopic]);
+
     useEffect(() => {
         if (user) {
             Promise.all([

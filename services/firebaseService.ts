@@ -1,5 +1,6 @@
 
 
+
 import { initializeApp, type FirebaseApp, type FirebaseError } from 'firebase/app';
 import { 
   getAuth, 
@@ -32,6 +33,7 @@ import {
     updateDoc,
     deleteDoc,
     setDoc,
+    Timestamp,
     type Firestore,
     type QueryDocumentSnapshot,
     type DocumentData
@@ -43,7 +45,7 @@ import {
     getDownloadURL,
     type Storage
 } from 'firebase/storage';
-import type { GeneratedContent, SavedContent, Project, Campaign, Topic, BrandVoiceProfile, PerformanceAnalysis } from '../types';
+import type { GeneratedContent, SavedContent, Project, Campaign, Topic, BrandVoiceProfile, PerformanceAnalysis, CalendarSettings, CalendarEvent } from '../types';
 
 
 // User-provided Firebase configuration
@@ -364,6 +366,66 @@ export const getBrandVoiceProfiles = async (userId: string): Promise<BrandVoiceP
 export const addBrandVoiceProfile = (data: Omit<BrandVoiceProfile, 'id' | 'createdAt'>) => addDoc(collection(db, "brandVoiceProfiles"), { ...data, createdAt: serverTimestamp() });
 export const updateBrandVoiceProfile = (id: string, data: Partial<BrandVoiceProfile>) => updateDoc(doc(db, "brandVoiceProfiles", id), data);
 export const deleteBrandVoiceProfile = (id: string) => deleteDoc(doc(db, "brandVoiceProfiles", id));
+
+
+// --- CALENDAR ---
+export const saveCalendarSettings = (userId: string, settings: Omit<CalendarSettings, 'userId'>) => {
+    const docRef = doc(db, 'calendarSettings', userId);
+    return setDoc(docRef, { ...settings, userId });
+};
+
+export const getCalendarSettings = async (userId: string): Promise<CalendarSettings | null> => {
+    try {
+        const docRef = doc(db, 'calendarSettings', userId);
+        const docSnap = await getDoc(docRef);
+        if (docSnap.exists()) {
+            return docSnap.data() as CalendarSettings;
+        }
+        return null;
+    } catch (error) {
+        throw handleFirestoreError(error, 'calendar settings');
+    }
+};
+
+export const getCalendarEvents = async (userId: string, startDate: Date, endDate: Date): Promise<CalendarEvent[]> => {
+    try {
+        const q = query(
+            collection(db, "calendarEvents"),
+            where("userId", "==", userId),
+            where("start", ">=", Timestamp.fromDate(startDate)),
+            where("start", "<=", Timestamp.fromDate(endDate)),
+        );
+        const snapshot = await getDocs(q);
+        return typedCollection<CalendarEvent>(snapshot.docs);
+    } catch (error) {
+        throw handleFirestoreError(error, 'calendar events');
+    }
+};
+
+export const addCalendarEventsBatch = async (userId: string, events: Omit<CalendarEvent, 'id' | 'userId'>[]) => {
+    const batch = writeBatch(db);
+    events.forEach(event => {
+        const newEventRef = doc(collection(db, 'calendarEvents'));
+        batch.set(newEventRef, {
+            ...event,
+            userId,
+            start: Timestamp.fromDate(new Date(event.start)), // Ensure start is a Firestore Timestamp
+        });
+    });
+    await batch.commit();
+};
+
+export const updateCalendarEvent = (eventId: string, data: Partial<CalendarEvent>) => {
+    const docRef = doc(db, "calendarEvents", eventId);
+    const dataToUpdate: any = { ...data };
+    if (data.start) {
+        dataToUpdate.start = Timestamp.fromDate(new Date(data.start));
+    }
+    return updateDoc(docRef, dataToUpdate);
+};
+
+export const deleteCalendarEvent = (eventId: string) => deleteDoc(doc(db, "calendarEvents", eventId));
+
 
 
 // ACCOUNT MANAGEMENT

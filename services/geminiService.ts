@@ -2,8 +2,9 @@
 
 
 
+
 import { GoogleGenAI, Type, Modality } from "@google/genai";
-import type { GeneratedContent, EditablePlatform, BrandVoiceProfile, Project, Campaign, PerformanceAnalysis } from '../types';
+import type { GeneratedContent, EditablePlatform, BrandVoiceProfile, Project, Campaign, PerformanceAnalysis, CalendarSettings } from '../types';
 import type { User } from './firebaseService';
 
 
@@ -598,5 +599,70 @@ export const analyzeInputForScaffolding = async (
         }
         // Re-throw the error so the component can handle it (e.g., ignore AbortError)
         throw error;
+    }
+};
+
+export const generateCalendarSuggestions = async (
+  settings: CalendarSettings,
+  currentDate: Date
+): Promise<{ title: string; date: string; type: 'trend' | 'event' }[]> => {
+    try {
+        const schema = {
+            type: Type.OBJECT,
+            properties: {
+                suggestions: {
+                    type: Type.ARRAY,
+                    items: {
+                        type: Type.OBJECT,
+                        properties: {
+                            title: { type: Type.STRING, description: "The catchy, actionable title for the content idea." },
+                            date: { type: Type.STRING, description: "The specific date for the suggestion in YYYY-MM-DD format." },
+                            type: { type: Type.STRING, description: "The type of suggestion, either 'trend' or 'event'." },
+                        },
+                        required: ["title", "date", "type"],
+                    },
+                    description: "An array of content suggestions."
+                }
+            },
+            required: ["suggestions"]
+        };
+
+        const monthName = currentDate.toLocaleString('default', { month: 'long' });
+        const year = currentDate.getFullYear();
+
+        const systemInstruction = `You are an expert content strategist and trend analyst. Your task is to generate relevant content ideas for a user's content calendar for a specific month.
+        1.  **Analyze Context:** The user's main topics are "${settings.mainTopics}" and their target audience is "${settings.targetAudience}". The target month is ${monthName} ${year}.
+        2.  **Use Tools:** Use the Google Search tool to find relevant information. You MUST make search queries.
+        3.  **Find Trends:** Search for current or predicted trending topics related to the user's main topics for the specified month.
+        4.  **Find Events:** Search for holidays, cultural events, or important dates in ${monthName} ${year} that are relevant to the user's topics and audience.
+        5.  **Generate Ideas:** Create a list of 5 diverse content ideas (a mix of trends and events). Each idea must be a specific, clickable title.
+        6.  **Output:** Return the list in a single, structured JSON object that adheres to the provided schema. Ensure dates are in YYYY-MM-DD format and fall within the correct month and year. Do not include any text outside of the JSON object.`;
+
+        const prompt = `Generate 5 content suggestions for ${monthName} ${year}.`;
+
+        const response = await ai.models.generateContent({
+            model: "gemini-2.5-pro",
+            contents: prompt,
+            config: {
+                systemInstruction,
+                tools: [{ googleSearch: {} }],
+                responseMimeType: "application/json",
+                responseSchema: schema,
+                temperature: 0.9,
+            },
+        });
+
+        const result = JSON.parse(response.text.trim());
+        if (result.suggestions && Array.isArray(result.suggestions)) {
+            return result.suggestions;
+        }
+        throw new Error("Invalid response format from AI for calendar suggestions.");
+
+    } catch (error) {
+        console.error("Error generating calendar suggestions with AI:", error);
+        if (error instanceof Error) {
+            throw new Error(`Gemini API call failed during calendar suggestion generation: ${error.message}`);
+        }
+        throw new Error("An unexpected error occurred during AI calendar suggestion generation.");
     }
 };
