@@ -1,6 +1,7 @@
 
 
 
+
 import React, { createContext, useContext, useState, useCallback, useEffect, useRef } from 'react';
 import { generateContentFlow, generateTopicsAI, regeneratePlatformContent, analyzePerformance, generateCalendarSuggestions } from '../services/geminiService';
 import { saveGeneratedContent, addMultipleTopics, updateContentAnalysis, addCalendarEventsBatch } from '../services/firebaseService';
@@ -50,6 +51,7 @@ export interface GenerationTask {
             currentDate?: Date;
         };
         onSuccess?: (result?: any, platform?: EditablePlatform) => void;
+        onError?: (error: Error) => void;
     };
 }
 
@@ -265,7 +267,11 @@ export const GenerationProvider: React.FC<{ children: React.ReactNode }> = ({ ch
                         updateTask(nextQueuedTask.id, { status: 'cancelled', message: 'Generation cancelled.' });
                     } else {
                         console.error(`Error during generation for task ${nextQueuedTask.id}:`, e);
-                        updateTask(nextQueuedTask.id, { status: 'error', message: e.message || 'An unexpected error occurred.', progress: nextQueuedTask.progress || 0 });
+                        const errorMessage = e.message || 'An unexpected error occurred.';
+                        updateTask(nextQueuedTask.id, { status: 'error', message: errorMessage, progress: nextQueuedTask.progress || 0 });
+                        if (nextQueuedTask.context.onError) {
+                            nextQueuedTask.context.onError(e);
+                        }
                     }
                 } finally {
                     // Reset active task state after completion, error, or cancellation

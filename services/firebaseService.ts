@@ -1,6 +1,3 @@
-
-
-
 import { initializeApp, type FirebaseApp, type FirebaseError } from 'firebase/app';
 import { 
   getAuth, 
@@ -184,8 +181,11 @@ const typedCollection = <T extends DocumentData>(docs: QueryDocumentSnapshot<Doc
 const handleFirestoreError = (error: unknown, context: string): Error => {
     console.error(`Error ${context}:`, error);
     const firebaseError = error as FirebaseError;
-    if (firebaseError.code === 'permission-denied' || firebaseError.code === 'failed-precondition') {
-         return new Error(`Could not fetch data. Check Firestore security rules or for missing indexes.`);
+    if (firebaseError.code === 'permission-denied') {
+        return new Error(`Permission Denied: Could not access ${context}. Please check your Firestore security rules to ensure you have the correct permissions.`);
+    }
+    if (firebaseError.code === 'failed-precondition') {
+        return new Error(`Failed Precondition: This operation was rejected for ${context}. It's often due to a missing Firestore index. Please check the Firebase console for index creation links in the error logs.`);
     }
     return new Error(`An unexpected error occurred while fetching ${context}.`);
 }
@@ -383,6 +383,9 @@ export const getCalendarSettings = async (userId: string): Promise<CalendarSetti
         }
         return null;
     } catch (error) {
+        if ((error as FirebaseError).code === 'permission-denied') {
+             throw new Error("Permission Denied: Could not fetch your calendar settings. Please ensure your Firestore security rules allow users to read their own document at 'calendarSettings/{userId}'. The document ID must match the user's ID.");
+        }
         throw handleFirestoreError(error, 'calendar settings');
     }
 };
@@ -396,23 +399,40 @@ export const getCalendarEvents = async (userId: string, startDate: Date, endDate
             where("start", "<=", Timestamp.fromDate(endDate)),
         );
         const snapshot = await getDocs(q);
-        return typedCollection<CalendarEvent>(snapshot.docs);
+        // Replace typedCollection with a manual map to convert Timestamp to ISO string
+        return snapshot.docs.map(doc => {
+            const data = doc.data();
+            const startTimestamp = data.start as Timestamp;
+            return {
+                id: doc.id,
+                ...data,
+                start: startTimestamp.toDate().toISOString(),
+            } as CalendarEvent;
+        });
     } catch (error) {
         throw handleFirestoreError(error, 'calendar events');
     }
 };
 
 export const addCalendarEventsBatch = async (userId: string, events: Omit<CalendarEvent, 'id' | 'userId'>[]) => {
-    const batch = writeBatch(db);
-    events.forEach(event => {
-        const newEventRef = doc(collection(db, 'calendarEvents'));
-        batch.set(newEventRef, {
-            ...event,
-            userId,
-            start: Timestamp.fromDate(new Date(event.start)), // Ensure start is a Firestore Timestamp
+    try {
+        const batch = writeBatch(db);
+        events.forEach(event => {
+            const newEventRef = doc(collection(db, 'calendarEvents'));
+            batch.set(newEventRef, {
+                ...event,
+                userId,
+                start: Timestamp.fromDate(new Date(event.start)), // Ensure start is a Firestore Timestamp
+            });
         });
-    });
-    await batch.commit();
+        await batch.commit();
+    } catch (error) {
+        if ((error as FirebaseError).code === 'permission-denied') {
+            const detailedError = `Permission Denied: Could not save AI suggestions to the calendar.\n\nThis is a common issue with Firestore Security Rules. For a 'create' operation, you must check against the incoming data ('request.resource.data') not the existing data ('resource.data').\n\nPlease use the following rule in your Firebase Console -> Firestore -> Rules:\n\nmatch /calendarEvents/{eventId} {\n  allow read, update, delete: if request.auth.uid == resource.data.userId;\n  allow create: if request.auth.uid == request.resource.data.userId;\n}`;
+            throw new Error(detailedError);
+        }
+        throw handleFirestoreError(error, 'calendar events batch creation');
+    }
 };
 
 export const updateCalendarEvent = (eventId: string, data: Partial<CalendarEvent>) => {

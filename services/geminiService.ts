@@ -3,6 +3,7 @@
 
 
 
+
 import { GoogleGenAI, Type, Modality } from "@google/genai";
 import type { GeneratedContent, EditablePlatform, BrandVoiceProfile, Project, Campaign, PerformanceAnalysis, CalendarSettings } from '../types';
 import type { User } from './firebaseService';
@@ -607,26 +608,6 @@ export const generateCalendarSuggestions = async (
   currentDate: Date
 ): Promise<{ title: string; date: string; type: 'trend' | 'event' }[]> => {
     try {
-        const schema = {
-            type: Type.OBJECT,
-            properties: {
-                suggestions: {
-                    type: Type.ARRAY,
-                    items: {
-                        type: Type.OBJECT,
-                        properties: {
-                            title: { type: Type.STRING, description: "The catchy, actionable title for the content idea." },
-                            date: { type: Type.STRING, description: "The specific date for the suggestion in YYYY-MM-DD format." },
-                            type: { type: Type.STRING, description: "The type of suggestion, either 'trend' or 'event'." },
-                        },
-                        required: ["title", "date", "type"],
-                    },
-                    description: "An array of content suggestions."
-                }
-            },
-            required: ["suggestions"]
-        };
-
         const monthName = currentDate.toLocaleString('default', { month: 'long' });
         const year = currentDate.getFullYear();
 
@@ -636,7 +617,7 @@ export const generateCalendarSuggestions = async (
         3.  **Find Trends:** Search for current or predicted trending topics related to the user's main topics for the specified month.
         4.  **Find Events:** Search for holidays, cultural events, or important dates in ${monthName} ${year} that are relevant to the user's topics and audience.
         5.  **Generate Ideas:** Create a list of 5 diverse content ideas (a mix of trends and events). Each idea must be a specific, clickable title.
-        6.  **Output:** Return the list in a single, structured JSON object that adheres to the provided schema. Ensure dates are in YYYY-MM-DD format and fall within the correct month and year. Do not include any text outside of the JSON object.`;
+        6.  **Output:** Your final output MUST be a single, clean JSON object. Do not include any text, markdown formatting (like \`\`\`json), or explanations outside of the JSON object itself. The JSON object should have a single key "suggestions" which is an array of objects. Each object in the array must have three keys: "title" (string), "date" (string in YYYY-MM-DD format), and "type" (string, either 'trend' or 'event').`;
 
         const prompt = `Generate 5 content suggestions for ${monthName} ${year}.`;
 
@@ -646,13 +627,20 @@ export const generateCalendarSuggestions = async (
             config: {
                 systemInstruction,
                 tools: [{ googleSearch: {} }],
-                responseMimeType: "application/json",
-                responseSchema: schema,
                 temperature: 0.9,
             },
         });
 
-        const result = JSON.parse(response.text.trim());
+        // The response text might be wrapped in markdown backticks, so we need to clean it.
+        let jsonText = response.text.trim();
+        if (jsonText.startsWith('```json')) {
+            jsonText = jsonText.substring(7);
+        }
+        if (jsonText.endsWith('```')) {
+            jsonText = jsonText.substring(0, jsonText.length - 3);
+        }
+
+        const result = JSON.parse(jsonText.trim());
         if (result.suggestions && Array.isArray(result.suggestions)) {
             return result.suggestions;
         }
