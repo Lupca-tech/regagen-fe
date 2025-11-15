@@ -157,4 +157,10 @@ export interface CalendarEvent {
     status: 'suggested_trend' | 'suggested_event' | 'draft' | 'published';
     type: 'trend' | 'event' | 'manual';
     contentId?: string; // Link to the generated content
+    // Fields for AI Event Reasoning
+    insight?: string;
+    suggestedAngles?: {
+        title: string;
+        predictionScore: number;
+    }[];
 }

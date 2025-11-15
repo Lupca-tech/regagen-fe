@@ -76,25 +76,64 @@ setPersistence(auth, indexedDBLocalPersistence)
 const db: Firestore = getFirestore(app);
 const storage: Storage = getStorage(app);
 
+// --- NEW FUNCTION for upcoming events notification ---
+export const getUpcomingEvents = async (userId: string, days: number): Promise<CalendarEvent[]> => {
+    try {
+        const today = new Date();
+        today.setHours(0, 0, 0, 0); // Start of today
+
+        const futureDate = new Date(today);
+        futureDate.setDate(today.getDate() + days); // e.g., 3 days from now
+
+        const q = query(
+            collection(db, "calendarEvents"),
+            where("userId", "==", userId),
+            where("start", ">=", Timestamp.fromDate(today)),
+            where("start", "<=", Timestamp.fromDate(futureDate)),
+            orderBy("start", "asc")
+        );
+        const snapshot = await getDocs(q);
+        return snapshot.docs.map(doc => {
+            const data = doc.data();
+            const startTimestamp = data.start as Timestamp;
+            return {
+                id: doc.id,
+                ...data,
+                start: startTimestamp.toDate().toISOString(),
+            } as CalendarEvent;
+        });
+    } catch (error) {
+        // This is a non-critical feature, so we log the error but don't throw to break the app.
+        console.warn("Could not fetch upcoming events for notification:", error);
+        return [];
+    }
+};
 
 /**
  * Custom hook to manage and provide the authentication state.
- * It returns the current user and a loading state, which is true
- * while Firebase is initializing and checking the auth status.
+ * It returns the current user, a loading state, and a list of upcoming events.
  */
 export const useAuth = () => {
     const [user, setUser] = useState<User | null>(null);
     const [loading, setLoading] = useState(true);
+    const [upcomingEvents, setUpcomingEvents] = useState<CalendarEvent[] | null>(null);
 
     useEffect(() => {
-        const unsubscribe = onAuthStateChanged(auth, (userState) => {
+        const unsubscribe = onAuthStateChanged(auth, async (userState) => {
             setUser(userState);
+            if (userState) {
+                // Fetch upcoming events for notifications when user logs in
+                const events = await getUpcomingEvents(userState.uid, 3);
+                setUpcomingEvents(events);
+            } else {
+                setUpcomingEvents(null);
+            }
             setLoading(false);
         });
         return () => unsubscribe();
     }, []);
 
-    return { user, loading };
+    return { user, loading, upcomingEvents };
 };
 
 
@@ -567,6 +606,22 @@ export const updateCalendarEvent = (eventId: string, data: Partial<CalendarEvent
 };
 
 export const deleteCalendarEvent = (eventId: string) => deleteDoc(doc(db, "calendarEvents", eventId));
+
+export const deleteCalendarEventsBatch = async (eventIds: string[]) => {
+    if (eventIds.length === 0) return;
+
+    try {
+        const batch = writeBatch(db);
+        eventIds.forEach(id => {
+            const eventRef = doc(db, "calendarEvents", id);
+            batch.delete(eventRef);
+        });
+        await batch.commit();
+    } catch (error) {
+        throw handleFirestoreError(error, 'deleting calendar events batch');
+    }
+};
+
 
 export const linkContentToCalendarEvent = (eventId: string, contentId:string) => {
     const docRef = doc(db, "calendarEvents", eventId);

@@ -1,8 +1,8 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 
 // Import services and types
 import { useAuth, type User } from './services/firebaseService';
-import type { EditablePlatform, GeneratedContent, View } from './types';
+import type { EditablePlatform, GeneratedContent, View, CalendarEvent } from './types';
 
 // Import components
 import { Header } from './components/Header';
@@ -16,6 +16,7 @@ import { TrendIcon, AiIcon, RocketIcon, SpinnerIcon } from './components/Icons';
 import { AuthModal } from './components/AuthModal';
 import { MagicCreatorDashboard } from './components/MagicCreatorDashboard';
 import { CalendarDashboard } from './components/CalendarDashboard';
+import { NotificationToast } from './components/NotificationToast';
 
 
 // Custom hook to handle scroll animations using Intersection Observer
@@ -61,7 +62,7 @@ const FullScreenLoader: React.FC = () => (
 
 
 const MainApp: React.FC = () => {
-    const { user: currentUser, loading: authLoading } = useAuth();
+    const { user: currentUser, loading: authLoading, upcomingEvents } = useAuth();
     const [view, setView] = useState<View>('magicCreator');
     const [prefillTopic, setPrefillTopic] = useState<string | undefined>(undefined);
     const [sourceCalendarEventId, setSourceCalendarEventId] = useState<string | undefined>();
@@ -71,13 +72,23 @@ const MainApp: React.FC = () => {
     // Legacy state, can be removed if Magic Creator always redirects
     const [generatedContent, setGeneratedContent] = useState<GeneratedContent | null>(null);
 
+    // Notification State
+    const [showNotification, setShowNotification] = useState(false);
+    const notificationShownRef = useRef(false); // Ref to ensure notification shows only once per session
+
     useScrollAnimation(view, !authLoading);
 
     useEffect(() => {
         if (!authLoading) {
             setView(currentUser ? 'projects' : 'magicCreator');
+            
+            // Trigger notification for upcoming events on login
+            if (currentUser && upcomingEvents && upcomingEvents.length > 0 && !notificationShownRef.current) {
+                setShowNotification(true);
+                notificationShownRef.current = true; // Mark as shown for this session
+            }
         }
-    }, [currentUser, authLoading]);
+    }, [currentUser, authLoading, upcomingEvents]);
     
     const handleNavigate = useCallback((newView: View, context?: any) => {
         setGeneratedContent(null);
@@ -199,6 +210,16 @@ const MainApp: React.FC = () => {
                 <p>&copy; {new Date().getFullYear()} RageGen. All rights reserved.</p>
             </footer>
             <AuthModal isOpen={isAuthModalOpen} onClose={() => setIsAuthModalOpen(false)} />
+            {showNotification && upcomingEvents && (
+                <NotificationToast
+                    count={upcomingEvents.length}
+                    onClose={() => setShowNotification(false)}
+                    onClick={() => {
+                        handleNavigate('calendar');
+                        setShowNotification(false);
+                    }}
+                />
+            )}
         </div>
     );
 };

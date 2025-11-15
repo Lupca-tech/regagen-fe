@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, useCallback, useEffect, useRef } from 'react';
 import { generateContentFlow, generateTopicsAI, regeneratePlatformContent, analyzePerformance, generateCalendarSuggestions } from '../services/geminiService';
 import { saveGeneratedContent, addMultipleTopics, updateContentAnalysis, addCalendarEventsBatch, linkContentToCalendarEvent } from '../services/firebaseService';
-import type { GeneratedContent, Topic, BrandVoiceProfile, EditablePlatform, Project, Campaign, SavedContent, CalendarSettings } from '../types';
+import type { GeneratedContent, Topic, BrandVoiceProfile, EditablePlatform, Project, Campaign, SavedContent, CalendarSettings, CalendarEvent } from '../types';
 import type { User } from 'firebase/auth';
 
 export interface GenerationTask {
@@ -241,11 +241,10 @@ export const GenerationProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
                         onProgressCallback(75, 'Populating calendar...');
                         
-                        const eventsToAdd = result.map((suggestion: any) => ({
-                            title: suggestion.title,
+                        const eventsToAdd = (result as any[]).map((suggestion: any) => ({
+                            ...suggestion, // Keep all fields like insight and suggestedAngles
                             start: suggestion.date,
                             status: suggestion.type === 'trend' ? 'suggested_trend' : 'suggested_event',
-                            type: suggestion.type,
                         }));
                         await addCalendarEventsBatch(userId, eventsToAdd);
                     }

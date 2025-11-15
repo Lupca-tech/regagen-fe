@@ -1,183 +1,53 @@
-import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { User, getCalendarSettings, saveCalendarSettings, getCalendarEvents, updateCalendarEvent, deleteCalendarEvent, addCalendarEventsBatch } from '../services/firebaseService';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { User, getCalendarSettings, saveCalendarSettings, getCalendarEvents, updateCalendarEvent, deleteCalendarEventsBatch } from '../services/firebaseService';
 import { CalendarSettings, CalendarEvent, View } from '../types';
 import { useGeneration } from '../contexts/GenerationContext';
-import { BackIcon, SparkleIcon, CheckCircleIcon, XCircleIcon, SettingsIcon, WebIcon, ChevronDownIcon } from './Icons';
 
-// --- PROPS ---
+import { useCalendar } from './calendar/hooks/useCalendar';
+import { CalendarHeader } from './calendar/CalendarHeader';
+import { CalendarGrid } from './calendar/CalendarGrid';
+import { MobileCalendarView } from './calendar/MobileCalendarView';
+import { SettingsModal } from './calendar/modals/SettingsModal';
+import { EventModal } from './calendar/modals/EventModal';
+import { DeleteConfirmationModal } from './calendar/modals/DeleteConfirmationModal';
+import { UpcomingEventsDrawer } from './calendar/UpcomingEventsDrawer';
+import { SkeletonItem } from './Icons';
+
 interface CalendarDashboardProps {
     user: User;
     onNavigate: (view: View, context?: any) => void;
 }
 
-// --- SUB-COMPONENTS ---
-const SettingsModal: React.FC<{ 
-    onSave: (settings: Omit<CalendarSettings, 'userId'>) => void;
-    onClose: () => void;
-    isSaving: boolean;
-    initialSettings?: Omit<CalendarSettings, 'userId'> | null;
-}> = ({ onSave, onClose, isSaving, initialSettings }) => {
-    const [mainTopics, setMainTopics] = useState(initialSettings?.mainTopics || '');
-    const [targetAudience, setTargetAudience] = useState(initialSettings?.targetAudience || '');
-    const isEditMode = !!initialSettings;
-
-    const handleSave = () => {
-        if (mainTopics.trim() && targetAudience.trim()) {
-            onSave({ mainTopics, targetAudience });
-        }
-    };
-
-    return (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in" onClick={onClose}>
-            <div className="bg-zinc-900 w-full max-w-lg rounded-2xl border border-zinc-700 shadow-2xl p-8" onClick={e => e.stopPropagation()}>
-                <h2 className="text-2xl font-bold text-center mb-2">{isEditMode ? 'Edit Content Assistant Settings' : 'Setup Your Content Assistant'}</h2>
-                <p className="text-zinc-400 text-center mb-6">{isEditMode ? 'Update your topics and audience to refine AI suggestions.' : 'Tell the AI what you\'re about so it can find the best ideas for you.'}</p>
-                <div className="space-y-4">
-                    <div>
-                        <label htmlFor="mainTopics" className="block text-sm font-medium text-zinc-300 mb-1">What are your main topics?</label>
-                        <textarea id="mainTopics" value={mainTopics} onChange={e => setMainTopics(e.target.value)} rows={3} placeholder="e.g., Personal finance, investing for beginners, self-development" className="w-full p-2 bg-zinc-800 border border-zinc-600 rounded-md" />
-                    </div>
-                    <div>
-                        <label htmlFor="targetAudience" className="block text-sm font-medium text-zinc-300 mb-1">Who is your target audience?</label>
-                        <textarea id="targetAudience" value={targetAudience} onChange={e => setTargetAudience(e.target.value)} rows={2} placeholder="e.g., Gen Z and young millennials in Vietnam" className="w-full p-2 bg-zinc-800 border border-zinc-600 rounded-md" />
-                    </div>
-                </div>
-                 <div className="flex justify-end gap-3 pt-6 mt-4 border-t border-zinc-800">
-                    <button type="button" onClick={onClose} className="px-4 py-2 text-sm font-semibold bg-zinc-700 hover:bg-zinc-600 rounded-lg">Cancel</button>
-                    <button onClick={handleSave} disabled={isSaving || !mainTopics.trim() || !targetAudience.trim()} className="px-4 py-2 text-sm font-semibold text-white bg-pink-600 hover:bg-pink-700 rounded-lg disabled:opacity-50">
-                        {isSaving ? 'Saving...' : 'Save Settings'}
-                    </button>
-                </div>
-            </div>
-        </div>
-    );
-};
-
-interface EventModalProps { 
-    event: CalendarEvent; 
-    onClose: () => void; 
-    onSave: (event: CalendarEvent, data: Partial<CalendarEvent>) => void; 
-    onDelete: (event: CalendarEvent) => void;
-    onCreateContent: (event: CalendarEvent) => void; 
-    onViewContent: (contentId: string) => void; // New prop for viewing content
-}
-
-const EventModal: React.FC<EventModalProps> = ({ event, onClose, onSave, onDelete, onCreateContent, onViewContent }) => {
-    const [title, setTitle] = useState(event.title);
-    const [status, setStatus] = useState(event.status);
-    const isSuggestion = event.status.startsWith('suggested');
-    const statusOptions: CalendarEvent['status'][] = isSuggestion ? [event.status, 'draft'] : ['draft', 'published'];
-
-    const handleSave = () => {
-        onSave(event, { title, status });
-    };
-
-    return (
-         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in" onClick={onClose}>
-            <div className="bg-zinc-900 w-full max-w-lg rounded-2xl border border-zinc-700 shadow-2xl p-6" onClick={e => e.stopPropagation()}>
-                <h2 className="text-xl font-bold mb-6 text-center">Edit Event</h2>
-                <div className="space-y-4">
-                    <div>
-                        <label htmlFor="title" className="block text-sm font-medium text-zinc-300 mb-1">Title</label>
-                        <input id="title" type="text" value={title} onChange={e => setTitle(e.target.value)} className="w-full p-2 bg-zinc-800 border border-zinc-600 rounded-md" />
-                    </div>
-                    <div>
-                        <label htmlFor="status" className="block text-sm font-medium text-zinc-300 mb-1">Status</label>
-                        <select id="status" value={status} onChange={e => setStatus(e.target.value as CalendarEvent['status'])} className="w-full p-2 bg-zinc-800 border border-zinc-600 rounded-md">
-                           {statusOptions.map(opt => <option key={opt} value={opt}>{opt.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}</option>)}
-                        </select>
-                    </div>
-                    {isSuggestion && (
-                         <button onClick={() => onCreateContent(event)} className="w-full flex items-center justify-center gap-2 px-4 py-2 font-semibold text-white bg-gradient-to-r from-purple-500 to-pink-600 rounded-lg">
-                            <SparkleIcon/> Create Content from this Idea
-                        </button>
-                    )}
-                    {event.contentId && ( // Conditionally render if contentId exists
-                        <button onClick={() => onViewContent(event.contentId!)} className="w-full flex items-center justify-center gap-2 px-4 py-2 font-semibold text-pink-300 bg-pink-900/30 border border-pink-500/50 rounded-lg hover:bg-pink-900/50">
-                            <WebIcon/> View Generated Content
-                        </button>
-                    )}
-                </div>
-                <div className="flex justify-between items-center pt-4 mt-4 border-t border-zinc-800">
-                    <button onClick={() => onDelete(event)} className="px-4 py-2 text-sm font-semibold text-red-400 hover:bg-red-900/50 rounded-lg">Delete</button>
-                    <div className="flex gap-3">
-                        <button onClick={onClose} className="px-4 py-2 text-sm font-semibold bg-zinc-700 hover:bg-zinc-600 rounded-lg">Cancel</button>
-                        <button onClick={handleSave} disabled={!title.trim()} className="px-4 py-2 text-sm font-semibold text-white bg-pink-600 hover:bg-pink-700 rounded-lg disabled:opacity-50">Save Changes</button>
-                    </div>
-                </div>
-            </div>
-        </div>
-    );
-};
-
-const DeleteConfirmationModal: React.FC<{
-    event: CalendarEvent;
-    onClose: () => void;
-    onConfirm: () => void;
-    isDeleting: boolean;
-}> = ({ event, onClose, onConfirm, isDeleting }) => (
-    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in" onClick={onClose}>
-        <div className="bg-zinc-900 w-full max-w-md rounded-2xl border border-red-500/50 shadow-2xl p-8" onClick={e => e.stopPropagation()}>
-            <h2 className="text-2xl font-bold text-center text-red-400">Delete Event?</h2>
-            <p className="text-zinc-400 text-center my-4">
-                Are you sure you want to permanently delete the event "{event.title}"?
-                <br/><br/>
-                <strong className="text-red-300">This action cannot be undone.</strong>
-            </p>
-            <div className="flex justify-end gap-3 pt-4">
-                <button onClick={onClose} disabled={isDeleting} className="px-4 py-2 text-sm font-semibold bg-zinc-700 hover:bg-zinc-600 rounded-lg disabled:opacity-50">
-                    Cancel
-                </button>
-                <button onClick={onConfirm} disabled={isDeleting} className="px-4 py-2 text-sm font-semibold text-white bg-red-600 hover:bg-red-700 rounded-lg disabled:opacity-50">
-                    {isDeleting ? 'Deleting...' : 'Yes, Delete'}
-                </button>
-            </div>
-        </div>
-    </div>
-);
-
-
-const getEventPillStyle = (status: CalendarEvent['status']) => {
-    switch (status) {
-        case 'suggested_trend': return 'bg-blue-900/50 text-blue-300 border-blue-500/30 hover:bg-blue-900/80';
-        case 'suggested_event': return 'bg-purple-900/50 text-purple-300 border-purple-500/30 hover:bg-purple-900/80';
-        case 'draft': return 'bg-zinc-700/50 text-zinc-300 border-zinc-500/30 hover:bg-zinc-700/80';
-        case 'published': return 'bg-green-900/50 text-green-300 border-green-500/30 hover:bg-green-900/80';
-        default: return 'bg-zinc-800';
-    }
-};
-
-// --- MAIN COMPONENT ---
 export const CalendarDashboard: React.FC<CalendarDashboardProps> = ({ user, onNavigate }) => {
     const [settings, setSettings] = useState<CalendarSettings | null>(null);
     const [events, setEvents] = useState<CalendarEvent[]>([]);
     const [currentDate, setCurrentDate] = useState(new Date());
-    const [loading, setLoading] = useState({ settings: true, events: true, generation: false });
+    const [loading, setLoading] = useState({ settings: true, events: true, deleting: false });
     const [error, setError] = useState<string | null>(null);
     
     const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
     const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null);
-    const [eventToDelete, setEventToDelete] = useState<CalendarEvent | null>(null);
-    const [isDeleting, setIsDeleting] = useState(false);
     const [generationSuccess, setGenerationSuccess] = useState(false);
     const [newEventIds, setNewEventIds] = useState<Set<string>>(new Set());
     const existingEventIdsRef = useRef<Set<string>>(new Set());
-    const [isMonthOverviewVisible, setIsMonthOverviewVisible] = useState(false);
-
+    const [isUpcomingDrawerOpen, setIsUpcomingDrawerOpen] = useState(false);
+    
+    const [isSelectionMode, setIsSelectionMode] = useState(false);
+    const [selectedEventIds, setSelectedEventIds] = useState<Set<string>>(new Set());
+    const [deleteConfirmation, setDeleteConfirmation] = useState<{ isOpen: boolean; eventIds: string[] }>({ isOpen: false, eventIds: [] });
 
     const { startGeneration, activeGenerations } = useGeneration();
     const generationTask = activeGenerations.find(g => g.context.type === 'calendarSuggestions');
+
+    const { monthGrid, daysOfWeek, eventsByDay, allDaysInMonth } = useCalendar(currentDate, events);
 
     const fetchSettings = useCallback(async () => {
         setLoading(prev => ({ ...prev, settings: true }));
         setError(null);
         try {
             const userSettings = await getCalendarSettings(user.uid);
-            if (userSettings) {
-                setSettings(userSettings);
-            } else {
-                setIsSettingsModalOpen(true);
-            }
+            if (userSettings) setSettings(userSettings);
+            else setIsSettingsModalOpen(true);
         } catch (e: any) {
             setError(e.message);
         } finally {
@@ -204,26 +74,17 @@ export const CalendarDashboard: React.FC<CalendarDashboardProps> = ({ user, onNa
     }, [fetchSettings]);
 
     useEffect(() => {
-        if (settings) {
-            fetchEvents();
-        }
+        if (settings) fetchEvents();
     }, [settings, fetchEvents]);
 
-    // Effect to detect and animate new events after generation
     useEffect(() => {
         if (existingEventIdsRef.current.size > 0) {
             const currentEventIds = new Set(events.map(e => e.id));
-            const newIds = new Set(
-                [...currentEventIds].filter(id => !existingEventIdsRef.current.has(id))
-            );
-
+            const newIds = new Set([...currentEventIds].filter(id => !existingEventIdsRef.current.has(id)));
             if (newIds.size > 0) {
                 setNewEventIds(newIds);
-                const timer = setTimeout(() => {
-                    setNewEventIds(new Set());
-                }, 5000); // Animation duration
-
-                existingEventIdsRef.current.clear(); // Consume the ref
+                const timer = setTimeout(() => setNewEventIds(new Set()), 5000);
+                existingEventIdsRef.current.clear();
                 return () => clearTimeout(timer);
             }
         }
@@ -245,32 +106,20 @@ export const CalendarDashboard: React.FC<CalendarDashboardProps> = ({ user, onNa
     const handleGetIdeas = () => {
         if (!settings || generationTask) return;
         setError(null);
-        
-        // Store current event IDs to identify new ones later
         existingEventIdsRef.current = new Set(events.map(e => e.id));
-
         startGeneration({
             id: `calendar-${user.uid}-${Date.now()}`,
             topicName: 'Generate Calendar Ideas',
-            status: 'queued',
-            progress: 0,
-            message: 'Queued for idea generation...',
+            status: 'queued', progress: 0, message: 'Queued for idea generation...',
             context: {
-                type: 'calendarSuggestions',
-                view: 'calendar',
-                params: {
-                    userId: user.uid,
-                    calendarSettings: settings,
-                    currentDate: currentDate,
-                },
+                type: 'calendarSuggestions', view: 'calendar',
+                params: { userId: user.uid, calendarSettings: settings, currentDate: currentDate },
                 onSuccess: () => {
                     setGenerationSuccess(true);
-                    setTimeout(() => setGenerationSuccess(false), 5000); // Hide after 5s
-                    fetchEvents(); // Re-fetch events which will trigger the highlight effect
+                    setTimeout(() => setGenerationSuccess(false), 5000);
+                    fetchEvents();
                 },
-                onError: (err: Error) => {
-                    setError(err.message);
-                }
+                onError: (err: Error) => setError(err.message)
             }
         });
     };
@@ -278,7 +127,7 @@ export const CalendarDashboard: React.FC<CalendarDashboardProps> = ({ user, onNa
     const handleEventSave = async (event: CalendarEvent, data: Partial<CalendarEvent>) => {
         try {
             await updateCalendarEvent(event.id, data);
-            fetchEvents(); // Refresh
+            fetchEvents();
         } catch(e: any) {
             setError(e.message);
         } finally {
@@ -286,35 +135,23 @@ export const CalendarDashboard: React.FC<CalendarDashboardProps> = ({ user, onNa
         }
     };
 
-    const handleEventDelete = (event: CalendarEvent) => {
+    const handleSingleEventDelete = (event: CalendarEvent) => {
+        setDeleteConfirmation({ isOpen: true, eventIds: [event.id] });
         setSelectedEvent(null);
-        setEventToDelete(event);
     };
-
-    const handleConfirmDelete = async () => {
-        if (!eventToDelete) return;
-        setIsDeleting(true);
-        try {
-            await deleteCalendarEvent(eventToDelete.id);
-            fetchEvents();
-        } catch (e: any) {
-            setError(e.message);
-        } finally {
-            setEventToDelete(null);
-            setIsDeleting(false);
-        }
-    };
-
+    
     const handleCreateContent = (event: CalendarEvent) => {
         onNavigate('magicCreator', { prefillTopic: event.title, sourceCalendarEventId: event.id });
     };
 
     const handleViewContent = (contentId: string) => {
         onNavigate('projects', { contentId });
-        setSelectedEvent(null); // Close the event modal
+        setSelectedEvent(null);
     };
 
     const changeMonth = (delta: number) => {
+        setIsSelectionMode(false);
+        setSelectedEventIds(new Set());
         setCurrentDate(prev => {
             const newDate = new Date(prev);
             newDate.setMonth(newDate.getMonth() + delta);
@@ -322,158 +159,118 @@ export const CalendarDashboard: React.FC<CalendarDashboardProps> = ({ user, onNa
         });
     };
 
-    const { monthGrid, daysOfWeek, eventsByDay, allDaysInMonth } = useMemo(() => {
-        const year = currentDate.getFullYear();
-        const month = currentDate.getMonth();
-        const firstDayOfMonth = new Date(year, month, 1).getDay();
-        const daysInMonth = new Date(year, month + 1, 0).getDate();
-        
-        const daysOfWeek = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-        const monthGrid: (Date | null)[] = [];
-        const allDaysInMonth: Date[] = [];
+    const toggleSelectionMode = () => {
+        setIsSelectionMode(prev => !prev);
+        setSelectedEventIds(new Set());
+    };
 
-        for (let i = 0; i < firstDayOfMonth; i++) {
-            monthGrid.push(null);
+    const handleEventClick = (event: CalendarEvent) => {
+        if (isSelectionMode) {
+            setSelectedEventIds(prev => {
+                const newSet = new Set(prev);
+                newSet.has(event.id) ? newSet.delete(event.id) : newSet.add(event.id);
+                return newSet;
+            });
+        } else {
+            setSelectedEvent(event);
         }
-        for (let i = 1; i <= daysInMonth; i++) {
-            const day = new Date(year, month, i);
-            monthGrid.push(day);
-            allDaysInMonth.push(day);
-        }
-        
-        const eventsByDay = events.reduce((acc, event) => {
-            const eventDate = new Date(event.start).toDateString();
-            if (!acc[eventDate]) {
-                acc[eventDate] = [];
-            }
-            acc[eventDate].push(event);
-            return acc;
-        }, {} as Record<string, CalendarEvent[]>);
-
-
-        return { monthGrid, daysOfWeek, eventsByDay, allDaysInMonth };
-    }, [currentDate, events]);
+    };
     
-    if (loading.settings) {
-        return <div className="p-6 text-center text-zinc-400">Loading calendar settings...</div>
-    }
+    const handleDeleteSelected = () => {
+        if (selectedEventIds.size > 0) {
+            setDeleteConfirmation({ isOpen: true, eventIds: Array.from(selectedEventIds) });
+        }
+    };
 
-    if (isSettingsModalOpen) {
-        return <SettingsModal 
-            onSave={handleSaveSettings} 
-            onClose={() => setIsSettingsModalOpen(false)}
-            isSaving={loading.settings}
-            initialSettings={settings}
-        />;
-    }
+    const handleDeleteAllInMonth = () => {
+        const allMonthEventIds = events.map(e => e.id);
+        if (allMonthEventIds.length > 0) {
+            setDeleteConfirmation({ isOpen: true, eventIds: allMonthEventIds });
+        }
+    };
+
+    const handleConfirmDelete = async () => {
+        setLoading(prev => ({ ...prev, deleting: true }));
+        setError(null);
+        try {
+            await deleteCalendarEventsBatch(deleteConfirmation.eventIds);
+            setDeleteConfirmation({ isOpen: false, eventIds: [] });
+            setSelectedEventIds(new Set());
+            setIsSelectionMode(false);
+            fetchEvents();
+        } catch (e: any) {
+            setError(e.message);
+        } finally {
+            setLoading(prev => ({ ...prev, deleting: false }));
+        }
+    };
+
+    const upcomingEventsForDrawer = React.useMemo(() => {
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        return events
+            .filter(event => new Date(event.start) >= today)
+            .sort((a, b) => new Date(a.start).getTime() - new Date(b.start).getTime());
+    }, [events]);
+
+    if (loading.settings) return <div className="p-6 text-center text-zinc-400">Loading calendar settings...</div>;
+    if (isSettingsModalOpen) return <SettingsModal onSave={handleSaveSettings} onClose={() => setIsSettingsModalOpen(false)} isSaving={loading.settings} initialSettings={settings} />;
 
     return (
-        <div className="bg-zinc-950/50 p-4 md:p-6 rounded-xl border border-zinc-800 animate-fade-in-fast">
+        <div className="bg-zinc-950/50 p-4 md:p-6 rounded-xl border border-zinc-800 animate-fade-in-fast relative">
             {error && (
                 <div className="bg-red-900/20 border border-red-500/50 rounded-lg p-4 mb-6 text-red-300 animate-fade-in flex justify-between items-center">
-                    <div className="flex-grow">
-                        <p className="font-bold">An Error Occurred</p>
-                        <p className="text-sm mt-1 whitespace-pre-wrap">{error}</p>
-                    </div>
+                    <div className="flex-grow"><p className="font-bold">An Error Occurred</p><p className="text-sm mt-1 whitespace-pre-wrap">{error}</p></div>
                     <button onClick={() => setError(null)} className="text-xl font-bold hover:text-white transition-colors flex-shrink-0 ml-4">&times;</button>
                 </div>
             )}
-            {selectedEvent && <EventModal event={selectedEvent} onClose={() => setSelectedEvent(null)} onSave={handleEventSave} onDelete={handleEventDelete} onCreateContent={handleCreateContent} onViewContent={handleViewContent} />}
-            {eventToDelete && <DeleteConfirmationModal event={eventToDelete} onClose={() => setEventToDelete(null)} onConfirm={handleConfirmDelete} isDeleting={isDeleting} />}
+            {selectedEvent && <EventModal event={selectedEvent} onClose={() => setSelectedEvent(null)} onSave={handleEventSave} onDelete={handleSingleEventDelete} onCreateContent={handleCreateContent} onViewContent={handleViewContent} />}
+            {deleteConfirmation.isOpen && <DeleteConfirmationModal count={deleteConfirmation.eventIds.length} onClose={() => setDeleteConfirmation({ isOpen: false, eventIds: [] })} onConfirm={handleConfirmDelete} isDeleting={loading.deleting} />}
+            <UpcomingEventsDrawer isOpen={isUpcomingDrawerOpen} onClose={() => setIsUpcomingDrawerOpen(false)} events={upcomingEventsForDrawer} onEventClick={setSelectedEvent} />
 
-            <div className="flex flex-col md:flex-row justify-between md:items-center mb-6 gap-4">
-                <div className="flex items-center gap-2 md:gap-4">
-                    <button onClick={() => changeMonth(-1)} className="p-2 rounded-md hover:bg-zinc-800"><BackIcon className="transform rotate-0" /></button>
-                    <h2 className="text-xl md:text-2xl font-bold w-40 md:w-48 text-center">{currentDate.toLocaleString('default', { month: 'long', year: 'numeric' })}</h2>
-                    <button onClick={() => changeMonth(1)} className="p-2 rounded-md hover:bg-zinc-800"><BackIcon className="transform rotate-180" /></button>
-                </div>
-                <div className="flex items-center gap-2 self-end md:self-center">
-                     <button 
-                        onClick={() => setIsSettingsModalOpen(true)}
-                        className="p-2 rounded-md hover:bg-zinc-800 text-zinc-400 hover:text-white transition-colors"
-                        title="Edit Settings"
-                    >
-                        <SettingsIcon className="w-5 h-5"/>
-                    </button>
-                    <div className="relative">
-                        <button onClick={handleGetIdeas} disabled={!!generationTask} className="flex items-center justify-center gap-2 px-4 py-2 font-semibold text-white bg-gradient-to-r from-purple-500 to-pink-600 rounded-lg hover:from-purple-600 hover:to-pink-700 disabled:opacity-50">
-                            <SparkleIcon className={generationTask ? 'animate-pulse' : ''}/>
-                            {generationTask ? 'Getting Ideas...' : 'Get AI Ideas'}
-                        </button>
-                        {generationSuccess && (
-                            <div className="absolute top-full mt-2 left-1/2 -translate-x-1/2 w-max px-3 py-1.5 text-xs font-medium rounded-md bg-green-600/20 text-green-300 border border-green-500/30 animate-fade-in">
-                                <CheckCircleIcon className="w-4 h-4 inline mr-1.5" />
-                                Successfully added new ideas to your calendar!
-                            </div>
-                        )}
-                    </div>
-                </div>
-            </div>
-
-            {/* --- MOBILE VIEW --- */}
+            <CalendarHeader
+                currentDate={currentDate}
+                isSelectionMode={isSelectionMode}
+                generationTask={generationTask}
+                generationSuccess={generationSuccess}
+                eventsCount={events.length}
+                selectedEventCount={selectedEventIds.size}
+                onChangeMonth={changeMonth}
+                onToggleSelectionMode={toggleSelectionMode}
+                onOpenUpcomingDrawer={() => setIsUpcomingDrawerOpen(true)}
+                onGetAIIdeas={handleGetIdeas}
+                onDeleteAll={handleDeleteAllInMonth}
+                onOpenSettings={() => setIsSettingsModalOpen(true)}
+                onDeleteSelected={handleDeleteSelected}
+            />
+            
             <div className="block md:hidden">
-                <button onClick={() => setIsMonthOverviewVisible(!isMonthOverviewVisible)} className="w-full flex justify-between items-center p-2 mb-4 bg-zinc-800/50 rounded-md">
-                    <span className="text-sm font-semibold">View Month Overview</span>
-                    <ChevronDownIcon className={`w-5 h-5 transition-transform ${isMonthOverviewVisible ? 'rotate-180' : ''}`} />
-                </button>
-                <div className={`collapsible-content ${isMonthOverviewVisible ? 'visible' : ''}`}>
-                    <div className="grid grid-cols-7 gap-1 text-center mb-4">
-                         {daysOfWeek.map(day => <div key={day} className="text-xs font-bold text-zinc-500">{day.charAt(0)}</div>)}
-                         {monthGrid.map((day, index) => (
-                             <div key={index} className={`w-full aspect-square flex items-center justify-center text-xs rounded-full ${day && eventsByDay[day.toDateString()] ? 'bg-pink-500/30 text-white' : ''} ${day ? '' : 'opacity-0'}`}>
-                                 {day?.getDate()}
-                             </div>
-                         ))}
-                    </div>
-                </div>
-                 <div className="space-y-4 max-h-[60vh] overflow-y-auto pr-2">
-                    {loading.events ? <p className="text-zinc-500">Loading events...</p> : allDaysInMonth.map(day => {
-                        const dayKey = day.toDateString();
-                        const dayEvents = eventsByDay[dayKey] || [];
-                        return (
-                            <div key={dayKey}>
-                                <h3 className="font-bold text-zinc-400 mb-2">{day.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}</h3>
-                                {dayEvents.length > 0 ? (
-                                    <div className="space-y-2 border-l-2 border-zinc-800 pl-4">
-                                        {dayEvents.map(event => (
-                                            <button key={event.id} onClick={() => setSelectedEvent(event)} className={`w-full text-left p-3 rounded-lg border transition-colors ${getEventPillStyle(event.status)} ${newEventIds.has(event.id) ? 'pulse-glow' : ''}`}>
-                                                <div className="flex justify-between items-start gap-2">
-                                                    <p className="font-semibold">{event.title}</p>
-                                                    <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-black/20 flex-shrink-0 capitalize">
-                                                        {event.status.replace(/_/g, ' ')}
-                                                    </span>
-                                                </div>
-                                                {event.contentId && <WebIcon className="w-4 h-4 text-zinc-400 mt-2" />}
-                                            </button>
-                                        ))}
-                                    </div>
-                                ) : (
-                                    <p className="text-sm text-zinc-600 border-l-2 border-zinc-800 pl-4 py-2">No events scheduled.</p>
-                                )}
-                            </div>
-                        )
-                    })}
-                </div>
+                {loading.events ? 
+                    <div className="space-y-4">{Array.from({length: 4}).map((_, i) => <SkeletonItem key={i}/>)}</div> :
+                    <MobileCalendarView
+                        allDaysInMonth={allDaysInMonth}
+                        eventsByDay={eventsByDay}
+                        isSelectionMode={isSelectionMode}
+                        selectedEventIds={selectedEventIds}
+                        newEventIds={newEventIds}
+                        onEventClick={handleEventClick}
+                    />
+                }
             </div>
             
-            {/* --- DESKTOP VIEW --- */}
-            <div className="hidden md:grid grid-cols-7 gap-1">
-                {daysOfWeek.map(day => <div key={day} className="text-center font-bold text-zinc-400 text-sm py-2">{day}</div>)}
-                {monthGrid.map((day, index) => {
-                    const dayEvents = day ? eventsByDay[day.toDateString()] : [];
-                    return (
-                        <div key={index} className={`h-32 bg-zinc-900/50 rounded-md p-1 border border-zinc-800/50 overflow-y-auto ${day ? '' : 'opacity-50'}`}>
-                            {day && <span className="text-xs font-bold ml-1">{day.getDate()}</span>}
-                            <div className="space-y-1 mt-1">
-                                {dayEvents && dayEvents.map(event => (
-                                     <button key={event.id} onClick={() => setSelectedEvent(event)} className={`w-full text-left p-1.5 text-xs rounded-md border transition-colors ${getEventPillStyle(event.status)} ${newEventIds.has(event.id) ? 'pulse-glow' : ''}`}>
-                                        <p className="font-semibold truncate">{event.title}</p>
-                                    </button>
-                                ))}
-                            </div>
-                        </div>
-                    )
-                })}
+            <div className="hidden md:block">
+                {loading.events ? 
+                    <div className="grid grid-cols-7 gap-1">{Array.from({length: 35}).map((_, i) => <div key={i} className="h-32 bg-zinc-900/50 rounded-md p-1 border border-zinc-800/50 animate-pulse"></div>)}</div> :
+                    <CalendarGrid
+                        monthGrid={monthGrid}
+                        daysOfWeek={daysOfWeek}
+                        eventsByDay={eventsByDay}
+                        isSelectionMode={isSelectionMode}
+                        selectedEventIds={selectedEventIds}
+                        newEventIds={newEventIds}
+                        onEventClick={handleEventClick}
+                    />
+                }
             </div>
         </div>
     );

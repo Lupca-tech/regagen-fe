@@ -1,5 +1,5 @@
 import { GoogleGenAI, Type, Modality } from "@google/genai";
-import type { GeneratedContent, EditablePlatform, BrandVoiceProfile, Project, Campaign, PerformanceAnalysis, CalendarSettings } from '../types';
+import type { GeneratedContent, EditablePlatform, BrandVoiceProfile, Project, Campaign, PerformanceAnalysis, CalendarSettings, CalendarEvent } from '../types';
 import type { User } from './firebaseService';
 
 
@@ -72,7 +72,6 @@ async function generateImage(prompt: string, onProgress: ProgressCallback, signa
             config: {
                 responseModalities: [Modality.IMAGE],
             },
-            signal,
         });
 
         for (const part of response.candidates?.[0]?.content?.parts || []) {
@@ -82,8 +81,6 @@ async function generateImage(prompt: string, onProgress: ProgressCallback, signa
                 return `data:image/png;base64,${base64ImageBytes}`;
             }
         }
-        // If the loop completes without returning, it means the API call succeeded but no image was in the response.
-        // This can happen due to safety filters. We throw an error to trigger the catch block.
         throw new Error("No image data found in response.");
 
     } catch (error) {
@@ -92,12 +89,10 @@ async function generateImage(prompt: string, onProgress: ProgressCallback, signa
         }
         console.error("Error generating image:", error);
          onProgress(90, "Image failed, using placeholder.");
-        // Return a placeholder image on failure
         return `https://picsum.photos/seed/${encodeURIComponent(prompt)}/1024/768`;
     }
 }
 
-// Fix: Made properties of FullGenerationContext optional to support partial context from different sources.
 interface FullGenerationContext {
     user?: User;
     projects?: Project[];
@@ -231,7 +226,6 @@ export const analyzePerformance = async (
                 responseMimeType: "application/json",
                 responseSchema: dynamicAnalysisSchema,
             },
-            signal,
         });
         
         return JSON.parse(response.text.trim());
@@ -310,7 +304,6 @@ export const generateContentFlow = async (
 
     let ragContext = '';
     if (generationContext) {
-        // Fix: Added optional chaining and nullish coalescing to prevent runtime errors if parts of the context are missing.
         ragContext = `
         **IMPORTANT CONTEXT TO PERSONALIZE CONTENT:**
         - **User Profile:** The user's display name is "${generationContext.user?.displayName || 'N/A'}".
@@ -341,7 +334,6 @@ export const generateContentFlow = async (
         responseSchema: dynamicContentGenerationSchema,
         temperature: 0.8,
       },
-      signal,
     });
     if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
 
@@ -364,9 +356,8 @@ export const generateContentFlow = async (
         const imagePrompts: string[] = textContent.imagePrompts;
         onProgress(75, `Generating ${imagePrompts.length} visual assets...`);
 
-        // Generate all images in parallel
         const imageUrls = await Promise.all(
-            imagePrompts.map(prompt => generateImage(prompt, () => {}, signal)) // Use a no-op progress callback for parallel calls
+            imagePrompts.map(prompt => generateImage(prompt, () => {}, signal))
         );
         if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
 
@@ -388,7 +379,6 @@ export const generateContentFlow = async (
       } catch (analysisError) {
         if ((analysisError as Error).name === 'AbortError') throw analysisError;
         console.warn("Performance analysis failed, but content was generated:", analysisError);
-        // Proceed without analysis data if it fails
       }
     }
     if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
@@ -464,7 +454,6 @@ export const regeneratePlatformContent = async (
                 responseMimeType: "application/json",
                 responseSchema,
             },
-            signal,
         });
     
         const regeneratedContent = JSON.parse(response.text.trim());
@@ -569,7 +558,6 @@ export const generateTopicsAI = async (
                 responseSchema: schema,
                 temperature: 0.9,
             },
-            signal,
         });
 
         const result = JSON.parse(response.text.trim());
@@ -614,7 +602,6 @@ export const analyzeInputForScaffolding = async (
                 responseMimeType: "application/json",
                 responseSchema: schema,
             },
-            signal,
         });
 
         return JSON.parse(response.text.trim());
@@ -623,7 +610,6 @@ export const analyzeInputForScaffolding = async (
         if ((error as Error).name !== 'AbortError') {
           console.error("Error analyzing input for scaffolding:", error);
         }
-        // Re-throw the error so the component can handle it (e.g., ignore AbortError)
         throw error;
     }
 };
@@ -632,20 +618,23 @@ export const generateCalendarSuggestions = async (
   settings: CalendarSettings,
   currentDate: Date,
   signal?: AbortSignal
-): Promise<{ title: string; date: string; type: 'trend' | 'event' }[]> => {
+): Promise<Omit<CalendarEvent, 'id' | 'userId'>[]> => {
     try {
         const monthName = currentDate.toLocaleString('default', { month: 'long' });
         const year = currentDate.getFullYear();
 
-        const systemInstruction = `You are an expert content strategist and trend analyst. Your task is to generate relevant content ideas for a user's content calendar for a specific month.
+        const systemInstruction = `You are a world-class content strategist and trend analyst. Your task is to generate 5 strategic content ideas for a user's content calendar.
         1.  **Analyze Context:** The user's main topics are "${settings.mainTopics}" and their target audience is "${settings.targetAudience}". The target month is ${monthName} ${year}.
-        2.  **Use Tools:** Use the Google Search tool to find relevant information. You MUST make search queries.
-        3.  **Find Trends:** Search for current or predicted trending topics related to the user's main topics for the specified month.
-        4.  **Find Events:** Search for holidays, cultural events, or important dates in ${monthName} ${year} that are relevant to the user's topics and audience.
-        5.  **Generate Ideas:** Create a list of 5 diverse content ideas (a mix of trends and events). Each idea must be a specific, clickable title.
-        6.  **Output:** Your final output MUST be a single, clean JSON object. Do not include any text, markdown formatting (like \`\`\`json), or explanations outside of the JSON object itself. The JSON object should have a single key "suggestions" which is an array of objects. Each object in the array must have three keys: "title" (string), "date" (string in YYYY-MM-DD format), and "type" (string, either 'trend' or 'event').`;
+        2.  **Find Events & Trends:** Use Google Search to find relevant holidays, cultural events, or trending topics for the specified month and user context.
+        3.  **For EACH idea, perform a deep analysis:**
+            a.  **Historical Analysis:** Briefly consider common content themes from past years to identify what is likely "saturated".
+            b.  **Trend Analysis:** Find emerging sub-topics or trending discussions with high "trending velocity".
+            c.  **Synthesize Insight:** Write a concise "insight" (2-3 sentences) explaining why traditional angles are saturated and highlighting new opportunities.
+            d.  **Suggest Angles:** Generate 2-3 specific, actionable content angles (like blog post titles) based on your insight.
+            e.  **Predict Performance:** For each angle, provide a "predictionScore" (0-100) estimating its potential for virality.
+        4.  **Output Format:** Your final output MUST be a single, clean JSON object. Do not include any text outside of the JSON object. The JSON should have a single key "suggestions" which is an array of 5 objects, each with these keys: "title", "date" (YYYY-MM-DD), "type" ('event' or 'trend'), "insight", and "suggestedAngles" (an array of objects with "title" and "predictionScore").`;
 
-        const prompt = `Generate 5 content suggestions for ${monthName} ${year}.`;
+        const prompt = `Generate 5 strategic content suggestions for ${monthName} ${year}.`;
 
         const response = await ai.models.generateContent({
             model: "gemini-flash-latest",
@@ -655,19 +644,17 @@ export const generateCalendarSuggestions = async (
                 tools: [{ googleSearch: {} }],
                 temperature: 0.9,
             },
-            signal,
         });
 
-        // The response text might be wrapped in markdown backticks, so we need to clean it.
-        let jsonText = response.text.trim();
-        if (jsonText.startsWith('```json')) {
-            jsonText = jsonText.substring(7);
-        }
-        if (jsonText.endsWith('```')) {
-            jsonText = jsonText.substring(0, jsonText.length - 3);
+        // Clean potential markdown code fences from the response
+        let responseText = response.text.trim();
+        if (responseText.startsWith('```json')) {
+            responseText = responseText.substring(7, responseText.length - 3).trim();
+        } else if (responseText.startsWith('```')) {
+             responseText = responseText.substring(3, responseText.length - 3).trim();
         }
 
-        const result = JSON.parse(jsonText.trim());
+        const result = JSON.parse(responseText);
         if (result.suggestions && Array.isArray(result.suggestions)) {
             return result.suggestions;
         }
