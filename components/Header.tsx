@@ -1,9 +1,6 @@
-
-
 import React, { useState } from 'react';
 import { signOutUser } from '../services/firebaseService';
 import type { User } from 'firebase/auth';
-// import { AuthModal } from './AuthModal'; // REMOVE THIS IMPORT
 import type { View } from '../types';
 import { SignInIcon, MagicWandIcon, ProjectsIcon, BrandVoiceIcon, AccountIcon, SignOutIcon, ChevronDownIcon, CalendarIcon } from './Icons';
 
@@ -11,7 +8,7 @@ interface HeaderProps {
     user: User | null;
     onNavigate: (view: View) => void;
     currentView: View;
-    onOpenAuthModal: () => void; // NEW PROP
+    onOpenAuthModal: () => void;
 }
 
 const UserMenu: React.FC<{ user: User; onNavigate: (view: View) => void; currentView: View }> = React.memo(({ user, onNavigate, currentView }) => {
@@ -79,34 +76,27 @@ const UserMenu: React.FC<{ user: User; onNavigate: (view: View) => void; current
 });
 
 export const Header: React.FC<HeaderProps> = ({ user, onNavigate, currentView, onOpenAuthModal }) => {
-    // REMOVE isAuthModalOpen STATE
-    // const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
-
     return (
-        <>
-            <header className="fixed top-0 left-0 right-0 z-40 bg-black/50 backdrop-blur-md border-b border-zinc-900">
-                <div className="container mx-auto px-4 h-20 flex justify-between items-center">
-                    <button onClick={() => onNavigate(user ? 'projects' : 'magicCreator')} className="text-2xl font-black uppercase tracking-tighter">
-                        Rage<span className="text-pink-500">Gen</span>
-                    </button>
+        <header className="fixed top-0 left-0 right-0 z-40 bg-black/50 backdrop-blur-md border-b border-zinc-900">
+            <div className="container mx-auto px-4 h-20 flex justify-between items-center">
+                <button onClick={() => onNavigate(user ? 'projects' : 'magicCreator')} className="text-2xl font-black uppercase tracking-tighter">
+                    Rage<span className="text-pink-500">Gen</span>
+                </button>
 
-                    <nav>
-                        {user ? (
-                           <UserMenu user={user} onNavigate={onNavigate} currentView={currentView} />
-                        ) : (
-                            <button
-                                onClick={onOpenAuthModal} // USE THE PROP HERE
-                                className="flex items-center justify-center px-4 py-2 font-semibold text-white bg-transparent border-2 border-pink-500 rounded-lg hover:bg-pink-500 transition-colors duration-300"
-                            >
-                                <SignInIcon className="w-5 h-5 mr-2" />
-                                Sign In
-                            </button>
-                        )}
-                    </nav>
-                </div>
-            </header>
-            {/* REMOVE AuthModal HERE */}
-            {/* <AuthModal isOpen={isAuthModalOpen} onClose={() => setIsAuthModalOpen(false)} /> */}
-        </>
+                <nav>
+                    {user ? (
+                       <UserMenu user={user} onNavigate={onNavigate} currentView={currentView} />
+                    ) : (
+                        <button
+                            onClick={onOpenAuthModal}
+                            className="flex items-center justify-center px-4 py-2 font-semibold text-white bg-transparent border-2 border-pink-500 rounded-lg hover:bg-pink-500 transition-colors duration-300"
+                        >
+                            <SignInIcon className="w-5 h-5 mr-2" />
+                            Sign In
+                        </button>
+                    )}
+                </nav>
+            </div>
+        </header>
     );
 };

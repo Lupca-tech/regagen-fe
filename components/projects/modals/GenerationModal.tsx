@@ -2,7 +2,8 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { User, getBrandVoiceProfiles } from '../../../services/firebaseService';
 import { Topic, EditablePlatform, BrandVoiceProfile } from '../../../types';
 import { useGeneration } from '../../../contexts/GenerationContext';
-import { WebIcon, FacebookIcon, LinkedInIcon, XIcon, TikTokIcon, YouTubeIcon, SparkleIcon } from '../../Icons';
+import { SparkleIcon } from '../../Icons';
+import { LANGUAGES, ALL_PLATFORMS } from '../../../constants';
 
 interface GenerationModalProps {
     topic: Topic;
@@ -10,25 +11,6 @@ interface GenerationModalProps {
     onClose: () => void;
     onGenerationSuccess: () => void;
 }
-
-const LANGUAGES = [
-    { code: 'English', name: 'English' },
-    { code: 'Spanish', name: 'Español' },
-    { code: 'French', name: 'Français' },
-    { code: 'German', name: 'Deutsch' },
-    { code: 'Japanese', name: '日本語' },
-    { code: 'Chinese', name: '中文' },
-    { code: 'Vietnamese', name: 'Tiếng Việt' },
-];
-
-const ALL_PLATFORMS: { id: EditablePlatform; name: string; icon: React.FC<{className?: string}> }[] = [
-    { id: 'web', name: 'Web/SEO', icon: WebIcon },
-    { id: 'facebook', name: 'Facebook', icon: FacebookIcon },
-    { id: 'linkedin', name: 'LinkedIn', icon: LinkedInIcon },
-    { id: 'x', name: 'X', icon: XIcon },
-    { id: 'tiktok', name: 'TikTok', icon: TikTokIcon },
-    { id: 'youtube', name: 'YouTube', icon: YouTubeIcon },
-];
 
 export const GenerationModal: React.FC<GenerationModalProps> = ({ topic, user, onClose, onGenerationSuccess }) => {
     const { startGeneration } = useGeneration();
@@ -53,7 +35,6 @@ export const GenerationModal: React.FC<GenerationModalProps> = ({ topic, user, o
         
         const selectedProfile = brandVoiceProfiles.find(p => p.id === selectedProfileId);
 
-        // Fix: Pass parameters inside a unified 'generationContext' object.
         startGeneration({
             id: topic.id,
             topicName: topic.name,

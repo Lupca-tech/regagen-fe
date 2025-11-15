@@ -3,8 +3,9 @@ import { User, getProjects, getAllUserCampaigns, getBrandVoiceProfiles, addProje
 import { analyzeInputForScaffolding } from '../services/geminiService';
 import { Project, Campaign, BrandVoiceProfile, EditablePlatform, GeneratedContent } from '../types';
 import { useGeneration } from '../contexts/GenerationContext';
-import { MagicWandIcon, WebIcon, FacebookIcon, LinkedInIcon, XIcon, TikTokIcon, YouTubeIcon, SparkleIcon, CheckCircleIcon, ChevronDownIcon, ProjectsIcon, RocketIcon, XCircleIcon } from './Icons';
+import { MagicWandIcon, CheckCircleIcon, ChevronDownIcon, ProjectsIcon, RocketIcon, XCircleIcon } from './Icons';
 import { ContentTabs } from './ContentTabs';
+import { LANGUAGES, ALL_PLATFORMS } from '../constants';
 
 // --- PROPS ---
 interface MagicCreatorDashboardProps {
@@ -23,25 +24,6 @@ type GenerationStep = {
 };
 
 type ViewState = 'input' | 'generating' | 'complete';
-
-// --- CONSTANTS ---
-const ALL_PLATFORMS: { id: EditablePlatform; name: string; icon: React.FC<{className?: string}> }[] = [
-    { id: 'web', name: 'Web/SEO', icon: WebIcon },
-    { id: 'facebook', name: 'Facebook', icon: FacebookIcon },
-    { id: 'linkedin', name: 'LinkedIn', icon: LinkedInIcon },
-    { id: 'x', name: 'X', icon: XIcon },
-    { id: 'tiktok', name: 'TikTok', icon: TikTokIcon },
-    { id: 'youtube', name: 'YouTube', icon: YouTubeIcon },
-];
-
-const LANGUAGES = [
-    { code: 'English', name: 'English' },
-    { code: 'Vietnamese', name: 'Tiếng Việt' },
-    { code: 'Spanish', name: 'Español' },
-    { code: 'French', name: 'Français' },
-    { code: 'German', name: 'Deutsch' },
-    { code: 'Japanese', name: '日本語' },
-];
 
 // --- HOOKS ---
 const useDebounce = (value: string, delay: number): string => {
@@ -325,7 +307,6 @@ export const MagicCreatorDashboard: React.FC<MagicCreatorDashboardProps> = ({ us
     }, [prefillTopic, debouncedUserInput]);
 
 
-    // Fix: Refactored useMemo to remove circular dependency.
     const filteredCampaigns = useMemo(() => {
         if (selectedProjectId === '__CREATE_NEW__') {
             return [];
@@ -333,16 +314,12 @@ export const MagicCreatorDashboard: React.FC<MagicCreatorDashboardProps> = ({ us
         return campaigns.filter(c => c.projectId === selectedProjectId);
     }, [campaigns, selectedProjectId]); 
 
-    // Fix: Added useEffect to handle resetting selectedCampaignId if it becomes invalid.
     useEffect(() => {
         if (selectedProjectId !== '__CREATE_NEW__') {
-            // Check if the currently selected campaign exists within the filtered campaigns for the project.
-            // If not, and it's not the 'create new' option, reset selectedCampaignId.
             if (selectedCampaignId !== '__CREATE_NEW__' && !filteredCampaigns.some(c => c.id === selectedCampaignId)) {
                 setSelectedCampaignId('__CREATE_NEW__');
             }
         } else {
-            // If we are creating a new project, then no existing campaign should be selected.
             if (selectedCampaignId !== '__CREATE_NEW__') {
                 setSelectedCampaignId('__CREATE_NEW__');
             }

@@ -21,6 +21,7 @@ const LucideIcon: React.FC<{ children: React.ReactNode; className?: string }> = 
 
 
 // --- General UI Icons ---
+export const SpinnerIcon: React.FC<{ className?: string }> = ({ className }) => <LucideIcon className={`animate-spin ${className}`}><path d="M21 12a9 9 0 1 1-6.219-8.56"/></LucideIcon>;
 export const PlusIcon: React.FC<{ className?: string }> = ({ className = 'w-5 h-5' }) => <LucideIcon className={className}><path d="M5 12h14"/><path d="M12 5v14"/></LucideIcon>;
 export const EditIcon: React.FC<{ className?: string }> = ({ className = 'w-4 h-4' }) => <LucideIcon className={className}><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></LucideIcon>;
 export const DeleteIcon: React.FC<{ className?: string }> = ({ className = 'w-4 h-4' }) => <LucideIcon className={className}><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/></LucideIcon>;

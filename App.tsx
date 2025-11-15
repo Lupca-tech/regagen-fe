@@ -1,8 +1,8 @@
-import React, { useState, useRef, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 
 // Import services and types
-import { onAuthStateChangedListener, type User } from './services/firebaseService';
-import type { EditablePlatform, GeneratedContent, BrandVoiceProfile, View } from './types';
+import { useAuth, type User } from './services/firebaseService';
+import type { EditablePlatform, GeneratedContent, View } from './types';
 
 // Import components
 import { Header } from './components/Header';
@@ -10,25 +10,25 @@ import { ContentTabs } from './components/ContentTabs';
 import { ProjectsDashboard } from './components/ProjectsDashboard';
 import { BrandVoiceDashboard } from './components/BrandVoiceDashboard';
 import { AccountDashboard } from './components/AccountDashboard';
-import { GenerationProvider, useGeneration } from './contexts/GenerationContext';
+import { GenerationProvider } from './contexts/GenerationContext';
 import { GenerationQueueWidget } from './components/GenerationQueueWidget';
-import { TrendIcon, AiIcon, RocketIcon } from './components/Icons';
+import { TrendIcon, AiIcon, RocketIcon, SpinnerIcon } from './components/Icons';
 import { AuthModal } from './components/AuthModal';
 import { MagicCreatorDashboard } from './components/MagicCreatorDashboard';
 import { CalendarDashboard } from './components/CalendarDashboard';
 
 
 // Custom hook to handle scroll animations using Intersection Observer
-const useScrollAnimation = (view: View) => {
-  const animatedElementsRef = useRef<Set<Element>>(new Set());
-
+const useScrollAnimation = (view: View, isReady: boolean) => {
   useEffect(() => {
+    if (!isReady) return;
+
     const observer = new IntersectionObserver(
       (entries) => {
         entries.forEach((entry) => {
-          if (entry.isIntersecting && !animatedElementsRef.current.has(entry.target)) {
+          if (entry.isIntersecting) {
             entry.target.classList.add('visible');
-            animatedElementsRef.current.add(entry.target);
+            observer.unobserve(entry.target);
           }
         });
       },
@@ -41,7 +41,7 @@ const useScrollAnimation = (view: View) => {
     return () => {
       elements.forEach((el) => observer.unobserve(el));
     };
-  }, [view]); // Re-run the animation setup whenever the view changes
+  }, [view, isReady]); // Re-run the animation setup whenever the view or readiness changes
 };
 
 // --- HELPER COMPONENTS ---
@@ -49,39 +49,40 @@ const NeonDivider: React.FC = () => (
     <div className="w-full h-px bg-gradient-to-r from-transparent via-pink-500/30 to-transparent my-20"></div>
 );
 
+const FullScreenLoader: React.FC = () => (
+    <div className="fixed inset-0 bg-black flex flex-col items-center justify-center z-[100]">
+        <h1 className="text-4xl font-black uppercase tracking-tighter mb-4">
+            Rage<span className="text-pink-500">Gen</span>
+        </h1>
+        <SpinnerIcon className="w-10 h-10 text-pink-500" />
+        <p className="text-zinc-500 mt-4 text-sm">Initializing...</p>
+    </div>
+);
+
+
 const MainApp: React.FC = () => {
-    const [currentUser, setCurrentUser] = useState<User | null>(null);
+    const { user: currentUser, loading: authLoading } = useAuth();
     const [view, setView] = useState<View>('magicCreator');
-    const [topic, setTopic] = useState(''); // This might be deprecated or used differently
     const [prefillTopic, setPrefillTopic] = useState<string | undefined>(undefined);
     const [sourceCalendarEventId, setSourceCalendarEventId] = useState<string | undefined>();
-    const [contentIdToView, setContentIdToView] = useState<string | undefined>(undefined); // New state for contentId
-
-    useScrollAnimation(view); // Pass the current view to the hook
-
-    // Legacy states from old creator, might be removed or repurposed
-    const [generatedContent, setGeneratedContent] = useState<GeneratedContent | null>(null);
-    const contentRef = useRef<HTMLDivElement>(null);
-    
-    const { activeGenerations } = useGeneration();
-    const mainGenerationTask = activeGenerations.find(g => g.context.view === 'magicCreator' && g.context.type === 'content');
-
+    const [contentIdToView, setContentIdToView] = useState<string | undefined>(undefined);
     const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
+    
+    // Legacy state, can be removed if Magic Creator always redirects
+    const [generatedContent, setGeneratedContent] = useState<GeneratedContent | null>(null);
 
+    useScrollAnimation(view, !authLoading);
 
     useEffect(() => {
-        const unsubscribe = onAuthStateChangedListener((user) => {
-            setCurrentUser(user);
-            setView(user ? 'projects' : 'magicCreator');
-        });
-        return unsubscribe;
-    }, []);
+        if (!authLoading) {
+            setView(currentUser ? 'projects' : 'magicCreator');
+        }
+    }, [currentUser, authLoading]);
     
     const handleNavigate = useCallback((newView: View, context?: any) => {
         setGeneratedContent(null);
-        setContentIdToView(undefined); // Clear existing contentIdToView when navigating
+        setContentIdToView(undefined);
         if (newView === 'magicCreator') {
-            setTopic('');
             if (context?.prefillTopic) {
                 setPrefillTopic(context.prefillTopic);
             }
@@ -93,23 +94,17 @@ const MainApp: React.FC = () => {
                 setContentIdToView(context.contentId);
             }
         } else {
-            setPrefillTopic(undefined); // Clear prefill when navigating away from magic creator
-            setSourceCalendarEventId(undefined); // Clear calendar event source
+            setPrefillTopic(undefined);
+            setSourceCalendarEventId(undefined);
         }
         
         setView(newView);
-        setIsAuthModalOpen(false); // Close auth modal on navigation
+        setIsAuthModalOpen(false);
     }, []);
     
-    const handleContentUpdate = useCallback((platform: EditablePlatform, newContent: any) => {
-      setGeneratedContent(prevContent => {
-        if (!prevContent) return null;
-        return {
-          ...prevContent,
-          [platform]: newContent,
-        };
-      });
-    }, []);
+    if (authLoading) {
+        return <FullScreenLoader />;
+    }
 
     const isDashboardView = ['projects', 'brandVoice', 'account', 'calendar'].includes(view);
     const dashboardTitles: Record<string, string> = {
@@ -166,25 +161,11 @@ const MainApp: React.FC = () => {
                            />
                         </div>
                     </section>
-
-                    {/* This section might be removed as Magic Creator redirects on completion */}
-                    <div ref={contentRef} className="my-10 min-h-[100px]">
-                        {generatedContent && !mainGenerationTask && (
-                           <div className="animate-fade-in">
-                             <ContentTabs 
-                                content={generatedContent} 
-                                topic={topic}
-                                language={"English"} // Needs to be dynamic
-                                onContentUpdate={handleContentUpdate}
-                              />
-                           </div>
-                        )}
-                    </div>
                     
                     <NeonDivider />
 
                     <section className="py-20">
-                        <h2 className="text-4xl md::text-5xl font-black text-center uppercase scroll-animate">HOW IT WORKS</h2>
+                        <h2 className="text-4xl md:text-5xl font-black text-center uppercase scroll-animate">HOW IT WORKS</h2>
                         <div className="mt-16 grid grid-cols-1 md:grid-cols-3 gap-12 text-center">
                             <div className="scroll-animate">
                                 <TrendIcon className="h-12 w-12 mx-auto text-pink-500" />

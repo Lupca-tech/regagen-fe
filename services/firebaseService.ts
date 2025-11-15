@@ -10,8 +10,8 @@ import {
   updateProfile,
   sendPasswordResetEmail,
   deleteUser,
-  setPersistence, // Added setPersistence
-  indexedDBLocalPersistence, // Added indexedDBLocalPersistence
+  setPersistence,
+  indexedDBLocalPersistence,
   type User,
   type Auth
 } from 'firebase/auth';
@@ -43,6 +43,7 @@ import {
     type Storage
 } from 'firebase/storage';
 import type { GeneratedContent, SavedContent, Project, Campaign, Topic, BrandVoiceProfile, PerformanceAnalysis, CalendarSettings, CalendarEvent } from '../types';
+import { useState, useEffect } from 'react';
 
 
 // User-provided Firebase configuration
@@ -65,7 +66,8 @@ const auth: Auth = getAuth(app);
 // with cross-origin authentication flows (e.g., app on Vercel, auth on firebaseapp.com)
 setPersistence(auth, indexedDBLocalPersistence)
   .then(() => {
-    console.log("Firebase Auth persistence set to indexedDBLocalPersistence.");
+    // This is for debugging, can be removed in production
+    // console.log("Firebase Auth persistence set to indexedDBLocalPersistence.");
   })
   .catch((error) => {
     console.error("Failed to set Firebase Auth persistence:", error);
@@ -73,6 +75,27 @@ setPersistence(auth, indexedDBLocalPersistence)
 
 const db: Firestore = getFirestore(app);
 const storage: Storage = getStorage(app);
+
+
+/**
+ * Custom hook to manage and provide the authentication state.
+ * It returns the current user and a loading state, which is true
+ * while Firebase is initializing and checking the auth status.
+ */
+export const useAuth = () => {
+    const [user, setUser] = useState<User | null>(null);
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        const unsubscribe = onAuthStateChanged(auth, (userState) => {
+            setUser(userState);
+            setLoading(false);
+        });
+        return () => unsubscribe();
+    }, []);
+
+    return { user, loading };
+};
 
 
 const getFirebaseAuthErrorMessage = (error: FirebaseError) => {
@@ -168,6 +191,8 @@ export const signOutUser = () => {
     return signOut(auth);
 };
 
+// Deprecated in favor of the useAuth hook for component usage.
+// Kept for potential non-component logic if needed in the future.
 export const onAuthStateChangedListener = (callback: (user: User | null) => void) => {
     return onAuthStateChanged(auth, callback);
 };

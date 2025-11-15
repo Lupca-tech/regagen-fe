@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { EditablePlatform, BrandVoiceProfile } from '../types';
 import { getBrandVoiceProfiles, User } from '../services/firebaseService';
-import { WebIcon, FacebookIcon, LinkedInIcon, XIcon, TikTokIcon, YouTubeIcon, SparkleIcon } from './Icons';
+import { LANGUAGES, ALL_PLATFORMS } from '../constants';
+import { SparkleIcon } from './Icons';
 
 interface TopicFormProps {
   topic: string;
@@ -17,25 +18,6 @@ interface TopicFormProps {
   isContextual?: boolean;
   user?: User | null;
 }
-
-const LANGUAGES = [
-    { code: 'English', name: 'English' },
-    { code: 'Spanish', name: 'Español' },
-    { code: 'French', name: 'Français' },
-    { code: 'German', name: 'Deutsch' },
-    { code: 'Japanese', name: '日本語' },
-    { code: 'Chinese', name: '中文' },
-    { code: 'Vietnamese', name: 'Tiếng Việt' },
-];
-
-const ALL_PLATFORMS: { id: EditablePlatform; name: string; icon: React.FC<{className?: string}> }[] = [
-    { id: 'web', name: 'Web/SEO', icon: WebIcon },
-    { id: 'facebook', name: 'Facebook', icon: FacebookIcon },
-    { id: 'linkedin', name: 'LinkedIn', icon: LinkedInIcon },
-    { id: 'x', name: 'X', icon: XIcon },
-    { id: 'tiktok', name: 'TikTok', icon: TikTokIcon },
-    { id: 'youtube', name: 'YouTube', icon: YouTubeIcon },
-];
 
 export const TopicForm: React.FC<TopicFormProps> = React.memo(({ 
     topic, setTopic, language, setLanguage, shouldGenerateImage, setShouldGenerateImage, 

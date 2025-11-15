@@ -1,22 +1,13 @@
-
 import React, { useState, useEffect } from 'react';
 import { User, getProjects, getAllUserCampaigns, getAllUserTopics, getUserContent } from '../../services/firebaseService';
-import { SavedContent, EditablePlatform } from '../../types';
-import { WebIcon, FacebookIcon, LinkedInIcon, XIconPlatform, TikTokIcon, YouTubeIcon } from '../Icons';
+import { SavedContent } from '../../types';
+import { ALL_PLATFORMS_WITH_TITLES } from '../../constants';
 
-const ALL_PLATFORMS: { id: EditablePlatform; name: string; icon: React.FC<{className?: string; title?: string}> }[] = [
-    { id: 'web', name: 'Web/SEO', icon: WebIcon },
-    { id: 'facebook', name: 'Facebook', icon: FacebookIcon },
-    { id: 'linkedin', name: 'LinkedIn', icon: LinkedInIcon },
-    { id: 'x', name: 'X', icon: XIconPlatform },
-    { id: 'tiktok', name: 'TikTok', icon: TikTokIcon },
-    { id: 'youtube', name: 'YouTube', icon: YouTubeIcon },
-];
 
 const PlatformIcons: React.FC<{ content: SavedContent }> = ({ content }) => {
     return (
         <div className="flex items-center gap-2">
-            {ALL_PLATFORMS.map(p => content[p.id] && <p.icon key={p.id} className="w-4 h-4 text-zinc-400" title={p.name} />)}
+            {ALL_PLATFORMS_WITH_TITLES.map(p => content[p.id] && <p.icon key={p.id} className="w-4 h-4 text-zinc-400" title={p.name} />)}
         </div>
     );
 };

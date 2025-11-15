@@ -13,20 +13,16 @@ export interface GenerationTask {
     generatedResult?: any; // To store the actual generated content/topics
     context: {
         type: 'content' | 'topics' | 'refineContent' | 'analyzeContent' | 'calendarSuggestions';
-        // Fix: Added 'magicCreator' to the view type to support the Magic Creator dashboard.
         view: 'creator' | 'dashboard' | 'magicCreator' | 'calendar';
         params: {
-            // Fix: Made 'topic' optional as it's not required for 'topics' generation tasks.
             topic?: string | Topic; // Can be string for creator, or Topic object for dashboard
             language?: string;
             shouldGenerateImage?: boolean;
             selectedPlatforms?: Set<EditablePlatform>;
-            // Fix: Replaced 'brandVoiceProfile' with a unified 'generationContext' object.
             generationContext?: {
                 user?: User;
                 projects?: Project[];
                 campaigns?: Campaign[];
-                // Fix: Updated type to include 'name' as it's required by the generation service.
                 brandVoiceProfile?: Omit<BrandVoiceProfile, 'id' | 'userId' | 'createdAt'> & { name: string };
             };
             userId?: string; // For dashboard view
