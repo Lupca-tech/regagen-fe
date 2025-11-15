@@ -56,6 +56,8 @@ export const BrandVoiceIcon: React.FC<{ className?: string }> = ({ className = '
 export const AccountIcon: React.FC<{ className?: string }> = ({ className = 'w-5 h-5' }) => <LucideIcon className={className}><path d="M18 20a6 6 0 0 0-12 0"/><circle cx="12" cy="10" r="4"/><circle cx="12" cy="12" r="10"/></LucideIcon>;
 export const SignOutIcon: React.FC<{ className?: string }> = ({ className = 'w-5 h-5' }) => <LucideIcon className={className}><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" x2="9" y1="12" y2="12"/></LucideIcon>;
 export const ChevronDownIcon: React.FC<{ className?: string }> = ({ className = 'w-4 h-4' }) => <LucideIcon className={className}><path d="m6 9 6 6 6-6"/></LucideIcon>;
+export const RadarIcon: React.FC<{ className?: string }> = ({ className = 'w-5 h-5' }) => <LucideIcon className={className}><path d="M19.07 4.93A10 10 0 0 0 6.99 3.34"/><path d="M4 6h.01"/><path d="M2.29 9.62A10 10 0 0 0 3.34 17"/><path d="M17.03 20.66A10 10 0 0 0 20.66 7"/><path d="M22 12h.01"/><path d="M12 2v.01"/><path d="M12 22v-.01"/><path d="M4.93 19.07A10 10 0 0 0 17 20.66"/><path d="M7 3.34A10 10 0 0 0 3.34 7"/><path d="M2 12h2.5"/><path d="M4.19 4.19 6 6"/><path d="M12 2v2.5"/><path d="M19.81 4.19 18 6"/><path d="M22 12h-2.5"/><path d="M19.81 19.81 18 18"/><path d="M12 22v-2.5"/><path d="M4.19 19.81 6 18"/></LucideIcon>;
+
 
 // --- Auth Modal Icons ---
 // Branded icon - do not change to Lucide wrapper
@@ -79,6 +81,8 @@ export const ChartBarIcon: React.FC<{ className?: string }> = ({ className }) =>
 // --- Generation Status Icons ---
 export const CheckCircleIcon: React.FC<{ className?: string }> = ({ className = 'w-5 h-5' }) => <LucideIcon className={className}><path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z"/><path d="m9 12 2 2 4-4"/></LucideIcon>;
 export const ExclamationCircleIcon: React.FC<{ className?: string }> = ({ className = 'w-5 h-5' }) => <LucideIcon className={className}><circle cx="12" cy="12" r="10"/><line x1="12" x2="12" y1="8" y2="12"/><line x1="12" x2="12.01" y1="16" y2="16"/></LucideIcon>;
+// Fix: Add MinusCircleIcon to resolve import error.
+export const MinusCircleIcon: React.FC<{ className?: string }> = ({ className = 'w-5 h-5' }) => <LucideIcon className={className}><circle cx="12" cy="12" r="10"/><path d="M8 12h8"/></LucideIcon>;
 export const XCircleIcon: React.FC<{ className?: string }> = ({ className }) => (<LucideIcon className={className}><circle cx="12" cy="12" r="10"/><path d="m15 9-6 6"/><path d="m9 9 6 6"/></LucideIcon>);
 
 // --- Account Dashboard Icons ---

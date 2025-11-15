@@ -1,4 +1,4 @@
-export type View = 'magicCreator' | 'projects' | 'brandVoice' | 'account' | 'calendar';
+export type View = 'magicCreator' | 'projects' | 'brandVoice' | 'account' | 'calendar' | 'aiVisibility';
 
 export type EditablePlatform = 'web' | 'facebook' | 'linkedin' | 'x' | 'tiktok' | 'youtube';
 
@@ -142,7 +142,7 @@ export interface BrandVoiceProfile {
   donts: string[];
 }
 
-// --- NEW TYPES FOR CALENDAR ---
+// --- CALENDAR TYPES ---
 export interface CalendarSettings {
     userId: string;
     mainTopics: string;
@@ -163,4 +163,47 @@ export interface CalendarEvent {
         title: string;
         predictionScore: number;
     }[];
+}
+
+// --- AI VISIBILITY (AIO) TYPES ---
+export interface ActionItem {
+    type: 'opportunity' | 'threat';
+    insight: string;
+    suggested_action: string;
+}
+
+export interface AIVisibilitySettings {
+    userId: string;
+    brandName: string;
+    domain: string;
+    keywords: string[];
+    competitors: string[];
+    // Linking fields
+    projectId?: string;
+    brandVoiceProfileId?: string;
+}
+
+export interface AIVisibilityResult {
+    id: string;
+    userId: string;
+    createdAt: FirestoreTimestamp;
+    shareOfVoice: { brand: string; percentage: number }[];
+    sentimentCounts: {
+        positive: number;
+        neutral: number;
+        negative: number;
+    };
+    sentimentAnalysis: {
+        brand: string;
+        sentiment: 'positive' | 'neutral' | 'negative';
+        reason: string;
+    }[];
+    citationTracking: {
+        query: string;
+        domain: string;
+        cited: boolean;
+        url?: string;
+        snippet?: string;
+    }[];
+    actionItem?: ActionItem;
 }

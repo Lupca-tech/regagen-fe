@@ -42,7 +42,7 @@ import {
     getDownloadURL,
     type Storage
 } from 'firebase/storage';
-import type { GeneratedContent, SavedContent, Project, Campaign, Topic, BrandVoiceProfile, PerformanceAnalysis, CalendarSettings, CalendarEvent } from '../types';
+import type { GeneratedContent, SavedContent, Project, Campaign, Topic, BrandVoiceProfile, PerformanceAnalysis, CalendarSettings, CalendarEvent, AIVisibilitySettings, AIVisibilityResult } from '../types';
 import { useState, useEffect } from 'react';
 
 
@@ -629,6 +629,43 @@ export const linkContentToCalendarEvent = (eventId: string, contentId:string) =>
         status: 'draft',
         contentId: contentId,
     });
+};
+
+// --- AI VISIBILITY (AIO) ---
+export const saveAIVisibilitySettings = (userId: string, settings: Omit<AIVisibilitySettings, 'userId'>) => {
+    const docRef = doc(db, 'aiVisibilitySettings', userId);
+    // Create a clean object to avoid any undefined values being sent to Firestore
+    const dataToSave = {
+        userId,
+        brandName: settings.brandName || '',
+        domain: settings.domain || '',
+        keywords: settings.keywords || [],
+        competitors: settings.competitors || [],
+        projectId: settings.projectId || null,
+        brandVoiceProfileId: settings.brandVoiceProfileId || null,
+    };
+    return setDoc(docRef, dataToSave);
+};
+
+
+export const getAIVisibilitySettings = async (userId: string): Promise<AIVisibilitySettings | null> => {
+    try {
+        const docRef = doc(db, 'aiVisibilitySettings', userId);
+        const docSnap = await getDoc(docRef);
+        return docSnap.exists() ? (docSnap.data() as AIVisibilitySettings) : null;
+    } catch (error) {
+        throw handleFirestoreError(error, 'AI visibility settings');
+    }
+};
+
+export const getAIVisibilityResults = async (userId: string): Promise<AIVisibilityResult[]> => {
+    try {
+        const q = query(collection(db, "aiVisibilityResults"), where("userId", "==", userId), orderBy("createdAt", "desc"));
+        const snapshot = await getDocs(q);
+        return typedCollection<AIVisibilityResult>(snapshot.docs);
+    } catch (error) {
+        throw handleFirestoreError(error, 'AI visibility results');
+    }
 };
 
 

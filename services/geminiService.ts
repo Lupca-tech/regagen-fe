@@ -1,5 +1,5 @@
 import { GoogleGenAI, Type, Modality } from "@google/genai";
-import type { GeneratedContent, EditablePlatform, BrandVoiceProfile, Project, Campaign, PerformanceAnalysis, CalendarSettings, CalendarEvent } from '../types';
+import type { GeneratedContent, EditablePlatform, BrandVoiceProfile, Project, Campaign, PerformanceAnalysis, CalendarSettings, CalendarEvent, AIVisibilitySettings, AIVisibilityResult, FirestoreTimestamp, ActionItem } from '../types';
 import type { User } from './firebaseService';
 
 
@@ -656,7 +656,15 @@ export const generateCalendarSuggestions = async (
 
         const result = JSON.parse(responseText);
         if (result.suggestions && Array.isArray(result.suggestions)) {
-            return result.suggestions;
+            // Transform the result to match the expected structure if needed
+            return result.suggestions.map((s: any) => ({
+                title: s.title,
+                start: s.date, // Ensure the key is 'start' for the CalendarEvent type
+                status: s.type === 'trend' ? 'suggested_trend' : 'suggested_event',
+                type: s.type,
+                insight: s.insight,
+                suggestedAngles: s.suggestedAngles,
+            }));
         }
         throw new Error("Invalid response format from AI for calendar suggestions.");
 
@@ -668,4 +676,181 @@ export const generateCalendarSuggestions = async (
         }
         throw new Error("An unexpected error occurred during AI calendar suggestion generation.");
     }
+};
+
+// --- AI VISIBILITY SERVICE (Mocked "AI-on-AI" flow) ---
+
+/**
+ * Simulates analyzing raw LLM text to produce a structured JSON object.
+ */
+function simulateMetaPromptAnalysis(rawText: string, settings: AIVisibilitySettings, query: string) {
+    const mentions: string[] = [];
+    const sentiments: AIVisibilityResult['sentimentAnalysis'] = [];
+    let citation: AIVisibilityResult['citationTracking'][0] = {
+        query,
+        domain: settings.domain,
+        cited: false
+    };
+
+    const textLower = rawText.toLowerCase();
+    const allBrands = [settings.brandName, ...settings.competitors];
+
+    // Analyze mentions and sentiment
+    allBrands.forEach(brand => {
+        const brandLower = brand.toLowerCase();
+        if (textLower.includes(brandLower)) {
+            mentions.push(brand);
+            let sentiment: 'positive' | 'negative' | 'neutral' = 'neutral';
+            let reason = `The brand ${brand} was mentioned in the context of the query.`;
+
+            if (/\b(excellent|best|great|highly recommended|love)\b/.test(textLower)) {
+                sentiment = 'positive';
+                reason = `Described with positive language like "excellent" or "best".`;
+            } else if (/\b(disappointing|lacks|not as good|poorly)\b/.test(textLower)) {
+                sentiment = 'negative';
+                reason = `Associated with negative phrases like "disappointing" or "lacks features".`;
+            }
+            sentiments.push({ brand, sentiment, reason });
+        }
+    });
+
+    // Analyze citation
+    if (textLower.includes(settings.domain.toLowerCase())) {
+        const urlMatch = rawText.match(new RegExp(`https?://${settings.domain.replace('.', '\\.')}[^\\s]*`, 'i'));
+        citation = {
+            ...citation,
+            cited: true,
+            url: urlMatch ? urlMatch[0] : `${settings.domain}/blog/ai-seo`,
+            snippet: `...${rawText.substring(Math.max(0, textLower.indexOf(settings.domain.toLowerCase()) - 30), 150)}...`,
+        };
+    }
+    
+    return { mentions, sentiments, citation };
+}
+
+/**
+ * Mocks a raw text response from a generic LLM.
+ */
+function mockLLMResponse(keyword: string, brandName: string, competitors: string[], domain: string): string {
+    const brandPool = [brandName, ...competitors, ...competitors]; // Skew towards competitors
+    const mentionedBrand = brandPool[Math.floor(Math.random() * brandPool.length)];
+    const secondMention = brandPool[Math.floor(Math.random() * brandPool.length)];
+    const positiveWords = ['excellent', 'the best', 'highly recommended', 'a great choice'];
+    const negativeWords = ['disappointing', 'lacks features', 'is not as good as', 'poorly reviewed'];
+    
+    let sentence = `When considering "${keyword}", many people find that ${mentionedBrand} is a popular option. `;
+    
+    const sentimentRoll = Math.random();
+    if (sentimentRoll < 0.5) { // Positive
+        sentence += `It is often described as ${positiveWords[Math.floor(Math.random() * positiveWords.length)]}. `;
+    } else if (sentimentRoll < 0.7) { // Negative
+        sentence += `However, some users find it ${negativeWords[Math.floor(Math.random() * negativeWords.length)]}. `;
+    } else { // Neutral/Comparison
+        sentence += `Compared to ${secondMention}, it has its own strengths. `;
+    }
+
+    const citationRoll = Math.random();
+    if (citationRoll < 0.4) { // Citation happens
+        sentence += `For more details on this, a good resource can be found at ${domain}/blog/${keyword.replace(/\s+/g, '-')}.`;
+    }
+
+    return sentence;
+}
+
+/**
+ * Simulates the Strategy Agent. It analyzes the aggregated results to find one key insight.
+ */
+function _generateActionItem(perKeywordAnalyses: any[], settings: AIVisibilitySettings): ActionItem | undefined {
+    // Priority 1: Find a threat (negative sentiment for our brand)
+    for (const analysis of perKeywordAnalyses) {
+        const negativeMention = analysis.sentiments.find((s: any) => s.brand === settings.brandName && s.sentiment === 'negative');
+        if (negativeMention) {
+            return {
+                type: 'threat',
+                insight: `Your brand received negative sentiment for the keyword "${analysis.citation.query}". The analysis noted: "${negativeMention.reason}"`,
+                suggested_action: `Review the content associated with "${analysis.citation.query}" to address the negative feedback. Consider publishing a corrective or clarifying piece.`
+            };
+        }
+    }
+
+    // Priority 2: Find a citation opportunity
+    for (const analysis of perKeywordAnalyses) {
+        if (!analysis.citation.cited) {
+            const competitorMentioned = analysis.sentiments.some((s: any) => s.brand !== settings.brandName);
+            if (competitorMentioned) {
+                return {
+                    type: 'opportunity',
+                    insight: `A competitor was mentioned for the strategic keyword "${analysis.citation.query}", but your domain was not cited as a source.`,
+                    suggested_action: `Create a comprehensive blog post or guide titled 'The Ultimate Guide to ${analysis.citation.query}' to become the primary source and capture this citation.`
+                };
+            }
+        }
+    }
+
+    // Fallback if no specific threat/opportunity is found
+    return {
+        type: 'opportunity',
+        insight: `Daily analysis complete. No high-priority threats detected. General opportunity exists to increase overall Share of Voice.`,
+        suggested_action: `Continue monitoring daily performance and consider a broader content push on keywords where competitor presence is high.`
+    };
+}
+
+export const getAIVisibilityAnalysis = async (settings: AIVisibilitySettings, signal?: AbortSignal): Promise<AIVisibilityResult> => {
+    await new Promise(resolve => setTimeout(resolve, 1500)); // Simulate network delay
+    if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
+
+    const allBrands = [settings.brandName, ...settings.competitors];
+    const perKeywordAnalyses: any[] = [];
+
+    // 1. Simulate Analysis Agent for each keyword
+    for (const keyword of settings.keywords) {
+        const rawResponse = mockLLMResponse(keyword, settings.brandName, settings.competitors, settings.domain);
+        const analysis = simulateMetaPromptAnalysis(rawResponse, settings, keyword);
+        perKeywordAnalyses.push(analysis);
+    }
+    
+    // 2. Simulate Summary Logic: Aggregate results
+    const finalResult: AIVisibilityResult = {
+        id: `result-${Date.now()}`,
+        userId: settings.userId,
+        createdAt: { seconds: Math.floor(Date.now() / 1000), nanoseconds: 0 } as FirestoreTimestamp,
+        shareOfVoice: [],
+        sentimentCounts: { positive: 0, neutral: 0, negative: 0 },
+        sentimentAnalysis: [],
+        citationTracking: [],
+    };
+    
+    const mentionCounts: Record<string, number> = {};
+    allBrands.forEach(b => mentionCounts[b] = 0);
+
+    perKeywordAnalyses.forEach(analysis => {
+        analysis.mentions.forEach((brand: string) => {
+             mentionCounts[brand] = (mentionCounts[brand] || 0) + 1;
+        });
+        finalResult.sentimentAnalysis.push(...analysis.sentiments);
+        finalResult.citationTracking.push(analysis.citation);
+    });
+
+    // 4. Finalize aggregations
+    const totalMentions = Object.values(mentionCounts).reduce((sum, count) => sum + count, 0);
+    finalResult.shareOfVoice = allBrands.map(brand => ({
+        brand,
+        percentage: totalMentions > 0 ? (mentionCounts[brand] / totalMentions) * 100 : 0,
+    }));
+    
+    finalResult.sentimentAnalysis.forEach(s => {
+        if (s.brand === settings.brandName) {
+            if (s.sentiment === 'positive') finalResult.sentimentCounts.positive++;
+            else if (s.sentiment === 'negative') finalResult.sentimentCounts.negative++;
+            else finalResult.sentimentCounts.neutral++;
+        }
+    });
+    
+    // 5. Simulate Strategy Agent to generate a single ActionItem
+    const actionItem = _generateActionItem(perKeywordAnalyses, settings);
+    if (actionItem) {
+        finalResult.actionItem = actionItem;
+    }
+
+    return finalResult;
 };

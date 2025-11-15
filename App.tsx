@@ -17,6 +17,7 @@ import { AuthModal } from './components/AuthModal';
 import { MagicCreatorDashboard } from './components/MagicCreatorDashboard';
 import { CalendarDashboard } from './components/CalendarDashboard';
 import { NotificationToast } from './components/NotificationToast';
+import { AIVisibilityDashboard } from './components/AIVisibilityDashboard';
 
 
 // Custom hook to handle scroll animations using Intersection Observer
@@ -117,12 +118,13 @@ const MainApp: React.FC = () => {
         return <FullScreenLoader />;
     }
 
-    const isDashboardView = ['projects', 'brandVoice', 'account', 'calendar'].includes(view);
+    const isDashboardView = ['projects', 'brandVoice', 'account', 'calendar', 'aiVisibility'].includes(view);
     const dashboardTitles: Record<string, string> = {
         projects: 'Content Dashboard',
         brandVoice: 'Brand Voice Co-Pilot',
         account: 'My Account',
-        calendar: 'Smart Content Calendar'
+        calendar: 'Smart Content Calendar',
+        aiVisibility: 'AI Visibility'
     };
     const currentDashboardTitle = dashboardTitles[view] || '';
 
@@ -137,6 +139,8 @@ const MainApp: React.FC = () => {
                 return <AccountDashboard user={currentUser} />;
             case 'calendar':
                 return <CalendarDashboard user={currentUser} onNavigate={handleNavigate} />;
+            case 'aiVisibility':
+                return <AIVisibilityDashboard user={currentUser} />;
             default:
                 return null;
         }

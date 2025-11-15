@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { signOutUser } from '../services/firebaseService';
 import type { User } from 'firebase/auth';
 import type { View } from '../types';
-import { SignInIcon, MagicWandIcon, ProjectsIcon, BrandVoiceIcon, AccountIcon, SignOutIcon, ChevronDownIcon, CalendarIcon } from './Icons';
+import { SignInIcon, MagicWandIcon, ProjectsIcon, BrandVoiceIcon, AccountIcon, SignOutIcon, ChevronDownIcon, CalendarIcon, RadarIcon } from './Icons';
 
 interface HeaderProps {
     user: User | null;
@@ -23,6 +23,7 @@ const UserMenu: React.FC<{ user: User; onNavigate: (view: View) => void; current
         { view: 'magicCreator', label: 'Magic Creator', icon: MagicWandIcon },
         { view: 'projects', label: 'Projects', icon: ProjectsIcon },
         { view: 'calendar', label: 'Calendar', icon: CalendarIcon },
+        { view: 'aiVisibility', label: 'AI Visibility', icon: RadarIcon },
         { view: 'brandVoice', label: 'Brand Voice', icon: BrandVoiceIcon },
         { view: 'account', label: 'My Account', icon: AccountIcon },
     ];
