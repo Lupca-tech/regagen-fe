@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import type { User } from '../../services/firebaseService';
 import { getProjects, getBrandVoiceProfiles, saveAIVisibilitySettings } from '../../services/firebaseService';
 import type { AIVisibilitySettings, Project, BrandVoiceProfile } from '../../types';
-import { XIcon } from '../Icons';
+import { XIcon, RadarIcon } from '../Icons';
 
 // --- PROPS ---
 interface SettingsFormProps {
@@ -104,6 +104,25 @@ export const SettingsForm: React.FC<SettingsFormProps> = ({ user, onSave, initia
         <div className="max-w-3xl mx-auto bg-zinc-900/50 p-8 rounded-xl border border-zinc-800 animate-fade-in">
             <h2 className="text-3xl font-bold text-center mb-2">Setup AI Visibility Tracking</h2>
             <p className="text-zinc-400 text-center mb-8">Tell us what to track. Our AI will scan public LLMs daily and report back.</p>
+            
+            <div className="bg-zinc-800/50 p-4 rounded-lg border border-zinc-700 mb-8 text-sm">
+                <div className="flex items-start gap-3">
+                    <RadarIcon className="w-6 h-6 text-pink-400 flex-shrink-0 mt-1" />
+                    <div>
+                        <h4 className="font-bold text-zinc-200">What is this?</h4>
+                        <p className="text-zinc-400 mt-1">
+                            AI Visibility tracks how your brand is represented by Large Language Models (LLMs). As AI becomes a primary source for information, your visibility here is as crucial as your Google ranking.
+                        </p>
+                        <h4 className="font-bold text-zinc-200 mt-3">How it Works:</h4>
+                        <ul className="list-disc list-inside text-zinc-400 mt-1 space-y-1">
+                            <li>We simulate daily queries to an LLM using your keywords.</li>
+                            <li>An "AI-on-AI" process analyzes the responses for mentions, sentiment, and citations of your domain.</li>
+                            <li>A final "Strategy Agent" AI identifies your biggest daily threat or opportunity.</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+
             <form onSubmit={handleSubmit} className="space-y-6">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <select value={formData.projectId} onChange={e => setFormData(p => ({...p, projectId: e.target.value}))} className="w-full bg-zinc-800 border border-zinc-700 rounded-md p-2">
