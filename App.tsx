@@ -10,7 +10,8 @@ import { ContentTabs } from './components/ContentTabs';
 import { ProjectsDashboard } from './components/ProjectsDashboard';
 import { BrandVoiceDashboard } from './components/BrandVoiceDashboard';
 import { AccountDashboard } from './components/AccountDashboard';
-import { GenerationProvider } from './contexts/GenerationContext';
+import { GenerationProvider, useGeneration } from './contexts/GenerationContext';
+import { ThemeProvider } from './contexts/ThemeContext';
 import { GenerationQueueWidget } from './components/GenerationQueueWidget';
 import { TrendIcon, AiIcon, RocketIcon, SpinnerIcon } from './components/Icons';
 import { AuthModal } from './components/AuthModal';
@@ -52,8 +53,8 @@ const NeonDivider: React.FC = () => (
 );
 
 const FullScreenLoader: React.FC = () => (
-    <div className="fixed inset-0 bg-black flex flex-col items-center justify-center z-[100]">
-        <h1 className="text-4xl font-black uppercase tracking-tighter mb-4">
+    <div className="fixed inset-0 bg-gray-50 dark:bg-black flex flex-col items-center justify-center z-[100]">
+        <h1 className="text-4xl font-black uppercase tracking-tighter mb-4 text-zinc-900 dark:text-white">
             Rage<span className="text-pink-500">Gen</span>
         </h1>
         <SpinnerIcon className="w-10 h-10 text-pink-500" />
@@ -69,6 +70,16 @@ const MainApp: React.FC = () => {
     const [sourceCalendarEventId, setSourceCalendarEventId] = useState<string | undefined>();
     const [contentIdToView, setContentIdToView] = useState<string | undefined>(undefined);
     const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
+    
+    // Generation Context for navigation blocking
+    const { activeGenerations, cancelGeneration } = useGeneration();
+    // Use a ref to track active generations without triggering excessive re-renders in navigation logic
+    const activeGenerationsRef = useRef(activeGenerations);
+
+    // Update ref when activeGenerations changes
+    useEffect(() => {
+        activeGenerationsRef.current = activeGenerations;
+    }, [activeGenerations]);
     
     // Legacy state, can be removed if Magic Creator always redirects
     const [generatedContent, setGeneratedContent] = useState<GeneratedContent | null>(null);
@@ -92,6 +103,23 @@ const MainApp: React.FC = () => {
     }, [currentUser, authLoading, upcomingEvents]);
     
     const handleNavigate = useCallback((newView: View, context?: any) => {
+        // Check if we are currently in Magic Creator and if a generation task is running
+        if (view === 'magicCreator') {
+            const magicGenTask = activeGenerationsRef.current.find(g => 
+                g.context.view === 'magicCreator' && 
+                (g.status === 'running' || g.status === 'queued')
+            );
+
+            // If user attempts to navigate away while generating
+            if (magicGenTask && newView !== 'magicCreator') {
+                const confirmLeave = window.confirm("Generation is in progress. Leaving this page will result in lost data. Are you sure you want to leave?");
+                if (!confirmLeave) return;
+                
+                // Cancel the task if user confirms leaving to clean up background processes
+                cancelGeneration(magicGenTask.id);
+            }
+        }
+
         setGeneratedContent(null);
         setContentIdToView(undefined);
         if (newView === 'magicCreator') {
@@ -112,7 +140,7 @@ const MainApp: React.FC = () => {
         
         setView(newView);
         setIsAuthModalOpen(false);
-    }, []);
+    }, [view, cancelGeneration]);
     
     if (authLoading) {
         return <FullScreenLoader />;
@@ -147,23 +175,23 @@ const MainApp: React.FC = () => {
     };
 
     return (
-        <div className="bg-black text-[#EAEAEA] font-sans overflow-x-hidden">
+        <div className="min-h-screen bg-gray-50 dark:bg-black text-zinc-900 dark:text-[#EAEAEA] font-sans overflow-x-hidden transition-colors duration-300">
             <Header
                 user={currentUser}
                 onNavigate={handleNavigate}
                 currentView={view}
                 onOpenAuthModal={() => setIsAuthModalOpen(true)}
             />
-            <main className="container mx-auto px-4 pt-24">
+            <main className="container mx-auto px-4 pt-24 pb-20">
                 {view === 'magicCreator' && (
                   <>
                     <section className="min-h-screen flex flex-col justify-center items-center text-center -mt-24">
-                        <h1 className="text-5xl md:text-7xl font-black uppercase tracking-tighter scroll-animate">
+                        <h1 className="text-5xl md:text-7xl font-black uppercase tracking-tighter scroll-animate text-zinc-900 dark:text-white">
                             DON'T CHASE TRENDS.
                             <br />
                             <span className="text-pink-500">BECOME ONE.</span>
                         </h1>
-                        <p className="max-w-2xl mt-6 text-lg text-zinc-400 scroll-animate" style={{ transitionDelay: '100ms' }}>
+                        <p className="max-w-2xl mt-6 text-lg text-zinc-600 dark:text-zinc-400 scroll-animate" style={{ transitionDelay: '100ms' }}>
                             RageGen scans the internet for trends, and writes viral-ready content for you in any language.
                         </p>
                         <div className="mt-10 w-full max-w-4xl scroll-animate" style={{ transitionDelay: '200ms' }}>
@@ -180,22 +208,22 @@ const MainApp: React.FC = () => {
                     <NeonDivider />
 
                     <section className="py-20">
-                        <h2 className="text-4xl md:text-5xl font-black text-center uppercase scroll-animate">HOW IT WORKS</h2>
+                        <h2 className="text-4xl md:text-5xl font-black text-center uppercase scroll-animate text-zinc-900 dark:text-white">HOW IT WORKS</h2>
                         <div className="mt-16 grid grid-cols-1 md:grid-cols-3 gap-12 text-center">
                             <div className="scroll-animate">
                                 <TrendIcon className="h-12 w-12 mx-auto text-pink-500" />
-                                <h3 className="mt-4 text-2xl font-bold uppercase">1. Find The Rage</h3>
-                                <p className="mt-2 text-zinc-400">We analyze real-time data from Google, TikTok, and X to pinpoint emerging trends before they hit the mainstream.</p>
+                                <h3 className="mt-4 text-2xl font-bold uppercase text-zinc-900 dark:text-white">1. Find The Rage</h3>
+                                <p className="mt-2 text-zinc-600 dark:text-zinc-400">We analyze real-time data from Google, TikTok, and X to pinpoint emerging trends before they hit the mainstream.</p>
                             </div>
                             <div className="scroll-animate" style={{ transitionDelay: '100ms' }}>
                                 <AiIcon className="h-12 w-12 mx-auto text-pink-500" />
-                                <h3 className="mt-4 text-2xl font-bold uppercase">2. Feed The AI</h3>
-                                <p className="mt-2 text-zinc-400">Our AI synthesizes top-performing content and trending keywords to understand the core of the viral potential.</p>
+                                <h3 className="mt-4 text-2xl font-bold uppercase text-zinc-900 dark:text-white">2. Feed The AI</h3>
+                                <p className="mt-2 text-zinc-600 dark:text-zinc-400">Our AI synthesizes top-performing content and trending keywords to understand the core of the viral potential.</p>
                             </div>
                             <div className="scroll-animate" style={{ transitionDelay: '200ms' }}>
                                 <RocketIcon className="h-12 w-12 mx-auto text-pink-500" />
-                                <h3 className="mt-4 text-2xl font-bold uppercase">3. Go Viral</h3>
-                                <p className="mt-2 text-zinc-400">Receive perfectly adapted content for every platform, ready to post and capture the wave of attention.</p>
+                                <h3 className="mt-4 text-2xl font-bold uppercase text-zinc-900 dark:text-white">3. Go Viral</h3>
+                                <p className="mt-2 text-zinc-600 dark:text-zinc-400">Receive perfectly adapted content for every platform, ready to post and capture the wave of attention.</p>
                             </div>
                         </div>
                     </section>
@@ -203,14 +231,14 @@ const MainApp: React.FC = () => {
               )}
               {isDashboardView && (
                 <section className="animate-fade-in min-h-[70vh]">
-                    <h1 className="text-4xl md:text-5xl font-black uppercase tracking-tighter mb-8">
+                    <h1 className="text-4xl md:text-5xl font-black uppercase tracking-tighter mb-8 text-zinc-900 dark:text-white">
                         {currentDashboardTitle.split(' ').slice(0, -1).join(' ')} <span className="text-pink-500">{currentDashboardTitle.split(' ').pop()}</span>
                     </h1>
                     {renderDashboard()}
                 </section>
               )}
             </main>
-            <footer className="container mx-auto px-4 text-center py-8 text-zinc-500 border-t border-zinc-900 mt-20">
+            <footer className="container mx-auto px-4 text-center py-8 text-zinc-500 border-t border-zinc-200 dark:border-zinc-900 mt-auto">
                 <p>&copy; {new Date().getFullYear()} RageGen. All rights reserved.</p>
             </footer>
             <AuthModal isOpen={isAuthModalOpen} onClose={() => setIsAuthModalOpen(false)} />
@@ -230,10 +258,12 @@ const MainApp: React.FC = () => {
 
 
 const App: React.FC = () => (
-    <GenerationProvider>
-        <MainApp />
-        <GenerationQueueWidget />
-    </GenerationProvider>
+    <ThemeProvider>
+        <GenerationProvider>
+            <MainApp />
+            <GenerationQueueWidget />
+        </GenerationProvider>
+    </ThemeProvider>
 );
 
 export default App;

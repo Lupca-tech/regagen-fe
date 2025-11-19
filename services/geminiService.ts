@@ -1,3 +1,4 @@
+
 import { GoogleGenAI, Type, Modality } from "@google/genai";
 import type { GeneratedContent, EditablePlatform, BrandVoiceProfile, Project, Campaign, PerformanceAnalysis, CalendarSettings, CalendarEvent, AIVisibilitySettings, AIVisibilityResult, FirestoreTimestamp, ActionItem } from '../types';
 import type { User } from './firebaseService';
@@ -483,7 +484,7 @@ export const analyzeBrandVoice = async (samples: string): Promise<Omit<BrandVoic
                     description: "A list of 3-5 specific, actionable rules to follow to replicate this voice (e.g., 'Use rhetorical questions to engage the reader', 'Incorporate industry-specific acronyms', 'Always start with a compelling statistic')."
                 },
                 donts: {
-                    type: Type.ARRAY,
+                    type: Type.ARRAY, 
                     items: { type: Type.STRING },
                     description: "A list of 3-5 things to avoid (e.g., 'Avoid using passive voice', 'Do not use slang or overly casual language', 'Never make unsubstantiated claims')."
                 }
@@ -632,9 +633,28 @@ export const generateCalendarSuggestions = async (
             c.  **Synthesize Insight:** Write a concise "insight" (2-3 sentences) explaining why traditional angles are saturated and highlighting new opportunities.
             d.  **Suggest Angles:** Generate 2-3 specific, actionable content angles (like blog post titles) based on your insight.
             e.  **Predict Performance:** For each angle, provide a "predictionScore" (0-100) estimating its potential for virality.
-        4.  **Output Format:** Your final output MUST be a single, clean JSON object. Do not include any text outside of the JSON object. The JSON should have a single key "suggestions" which is an array of 5 objects, each with these keys: "title", "date" (YYYY-MM-DD), "type" ('event' or 'trend'), "insight", and "suggestedAngles" (an array of objects with "title" and "predictionScore").`;
+        
+        4.  **Output Format:** Your final output MUST be a single, clean JSON object.
+            - Do not include any conversational text, intro, or outro.
+            - Start the response immediately with '{' and end with '}'.
+            - The JSON should have a single key "suggestions" which is an array of 5 objects.
+            
+            JSON Structure:
+            {
+              "suggestions": [
+                {
+                  "title": "string",
+                  "date": "YYYY-MM-DD",
+                  "type": "trend" | "event",
+                  "insight": "string",
+                  "suggestedAngles": [
+                    { "title": "string", "predictionScore": number }
+                  ]
+                }
+              ]
+            }`;
 
-        const prompt = `Generate 5 strategic content suggestions for ${monthName} ${year}.`;
+        const prompt = `Generate 5 strategic content suggestions for ${monthName} ${year}. Return ONLY JSON.`;
 
         const response = await ai.models.generateContent({
             model: "gemini-flash-latest",
@@ -646,12 +666,14 @@ export const generateCalendarSuggestions = async (
             },
         });
 
-        // Clean potential markdown code fences from the response
         let responseText = response.text.trim();
-        if (responseText.startsWith('```json')) {
-            responseText = responseText.substring(7, responseText.length - 3).trim();
-        } else if (responseText.startsWith('```')) {
-             responseText = responseText.substring(3, responseText.length - 3).trim();
+        
+        // Robust JSON extraction: find first '{' and last '}'
+        const startIndex = responseText.indexOf('{');
+        const endIndex = responseText.lastIndexOf('}');
+        
+        if (startIndex !== -1 && endIndex !== -1) {
+            responseText = responseText.substring(startIndex, endIndex + 1);
         }
 
         const result = JSON.parse(responseText);

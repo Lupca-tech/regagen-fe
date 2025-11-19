@@ -7,15 +7,15 @@ import type { User } from 'firebase/auth';
 export interface GenerationTask {
     id: string;
     topicName: string;
-    status: 'queued' | 'running' | 'success' | 'error' | 'cancelled'; // Added 'cancelled'
+    status: 'queued' | 'running' | 'success' | 'error' | 'cancelled';
     progress: number;
     message: string;
-    generatedResult?: any; // To store the actual generated content/topics
+    generatedResult?: any;
     context: {
         type: 'content' | 'topics' | 'refineContent' | 'analyzeContent' | 'calendarSuggestions';
         view: 'creator' | 'dashboard' | 'magicCreator' | 'calendar';
         params: {
-            topic?: string | Topic; // Can be string for creator, or Topic object for dashboard
+            topic?: string | Topic;
             language?: string;
             shouldGenerateImage?: boolean;
             selectedPlatforms?: Set<EditablePlatform>;
@@ -25,10 +25,10 @@ export interface GenerationTask {
                 campaigns?: Campaign[];
                 brandVoiceProfile?: Omit<BrandVoiceProfile, 'id' | 'userId' | 'createdAt'> & { name: string };
             };
-            userId?: string; // For dashboard view
-            project?: any; // For topics generation
-            campaign?: any; // For topics generation
-            count?: number; // For topics generation
+            userId?: string;
+            project?: any;
+            campaign?: any;
+            count?: number;
             
             // For refineContent tasks
             platform?: EditablePlatform;
@@ -72,7 +72,7 @@ export const GenerationProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     const [tasks, setTasks] = useState<GenerationTask[]>([]);
     const [isProgressModalVisible, setIsProgressModalVisible] = useState(false);
     const [activeGenerationId, setActiveGenerationId] = useState<string | null>(null);
-    const activeController = useRef<AbortController | null>(null); // To handle API call cancellation
+    const activeController = useRef<AbortController | null>(null);
 
     const updateTask = useCallback((taskId: string, updates: Partial<GenerationTask>) => {
         setTasks(prevTasks =>
@@ -82,17 +82,31 @@ export const GenerationProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
     const startGeneration = useCallback((newTask: GenerationTask) => {
         setTasks(prevTasks => {
-            // Prevent adding duplicate tasks if one is already queued or running
-            if (prevTasks.some(t => t.id === newTask.id && (t.status === 'queued' || t.status === 'running'))) {
-                console.warn(`Task with ID ${newTask.id} is already in the queue or running.`);
-                return prevTasks;
+            // Special handling for Magic Creator: Enforce Singleton (No Queueing)
+            // If the user starts a new magic creator task, we explicitly remove any existing ones
+            // to prevent them from blocking the new one or appearing in the state.
+            let updatedTasks = [...prevTasks];
+            
+            if (newTask.context.view === 'magicCreator') {
+                // Filter out any existing magicCreator tasks to prevent queuing issues
+                updatedTasks = updatedTasks.filter(t => t.context.view !== 'magicCreator');
+                
+                // If the active task was a magic creator task (which we just removed), 
+                // we must also ensure the active lock is cleared so the new one can start immediately.
+                // Note: We can't easily check 'activeGenerationId' here inside the state updater securely,
+                // but the cancelGeneration logic handles the abort. 
+                // This filter ensures the 'queue' logic won't find a stale task.
             }
-            // Add task to the queue
-            return [...prevTasks, { ...newTask, status: 'queued', progress: 0, message: 'Queued...' }];
+
+            // Prevent adding duplicate tasks if one is already queued or running (generic check)
+            if (updatedTasks.some(t => t.id === newTask.id && (t.status === 'queued' || t.status === 'running'))) {
+                console.warn(`Task with ID ${newTask.id} is already in the queue or running.`);
+                return updatedTasks;
+            }
+            
+            return [...updatedTasks, { ...newTask, status: 'queued', progress: 0, message: 'Queued...' }];
         });
         
-        // Show the modal automatically only for tasks that are not from the magic creator,
-        // as it has its own inline progress display.
         if (newTask.context.view !== 'magicCreator') {
             if (!isProgressModalVisible) {
                 setIsProgressModalVisible(true);
@@ -101,71 +115,69 @@ export const GenerationProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     }, [isProgressModalVisible]);
 
     const cancelGeneration = useCallback((taskId: string) => {
-        setTasks(prevTasks => {
-            const taskToCancel = prevTasks.find(t => t.id === taskId);
-            if (!taskToCancel || (taskToCancel.status !== 'running' && taskToCancel.status !== 'queued')) {
-                return prevTasks; // Task not found or not in a cancellable state
-            }
-
-            // If the task is currently active, abort the API call
-            if (activeGenerationId === taskId && activeController.current) {
+        // 1. Handle the Active Task Logic Synchronously
+        // If the task being cancelled is the one currently holding the lock (activeGenerationId),
+        // we must release the lock IMMEDIATELY. We cannot wait for the promise 'finally' block
+        // because that creates a race condition where the user clicks "Create" again before the
+        // old promise resolves/rejects, causing the new task to sit in "Queued" forever.
+        if (activeGenerationId === taskId) {
+            if (activeController.current) {
                 activeController.current.abort();
             }
+            // FORCE RELEASE THE LOCK
+            setActiveGenerationId(null);
+            activeController.current = null;
+        }
 
-            // Update status and filter out the cancelled task immediately
-            return prevTasks.map((task): GenerationTask => {
-                if (task.id === taskId) {
-                    return { ...task, status: 'cancelled', message: 'Cancelled by user.' };
-                }
-                return task;
-            }).filter(task => task.id !== taskId); // Remove cancelled tasks from the list immediately
+        // 2. Update State
+        setTasks(prevTasks => {
+            // Remove the task entirely from the list immediately. 
+            // We don't keep 'cancelled' tasks in history for Magic Creator or generally to keep the UI clean.
+            return prevTasks.filter(task => task.id !== taskId);
         });
     }, [activeGenerationId]);
 
     const showProgressModal = useCallback(() => setIsProgressModalVisible(true), []);
     const hideProgressModal = useCallback(() => {
         setIsProgressModalVisible(false);
-        // Clean up all completed, error, or cancelled tasks when modal is hidden
         setTasks(prevTasks => prevTasks.filter(task => task.status === 'running' || task.status === 'queued'));
     }, []);
 
     // Effect to process the generation queue
     useEffect(() => {
-        // Find the next queued task
         const nextQueuedTask = tasks.find(t => t.status === 'queued');
 
-        // If there's a queued task and no task is currently active, start processing it
+        // Only start if there is a queued task AND no task is currently active
         if (nextQueuedTask && !activeGenerationId) {
-            setActiveGenerationId(nextQueuedTask.id); // Mark this task as active
-
+            setActiveGenerationId(nextQueuedTask.id);
+            
             const controller = new AbortController();
-            activeController.current = controller; // Store the controller to allow cancellation
+            activeController.current = controller;
 
             const executeTask = async () => {
-                // Update the task status to 'running'
+                // Check if task still exists in state (it might have been cancelled rapidly)
+                // Although activeGenerationId protects us, a double check is good.
                 updateTask(nextQueuedTask.id, { status: 'running', message: 'Starting process...' });
 
-                // Callback for progress updates from Gemini service
                 const onProgressCallback = (progress: number, message: string) => {
-                    updateTask(nextQueuedTask.id, { progress, message });
+                    // Only update if not aborted
+                    if (!controller.signal.aborted) {
+                        updateTask(nextQueuedTask.id, { progress, message });
+                    }
                 };
 
                 try {
                     let result;
-                    // --- Content Generation (main article, social posts, image) ---
                     if (nextQueuedTask.context.type === 'content') {
                         const { topic, language, shouldGenerateImage, selectedPlatforms, generationContext, userId, project, campaign, sourceCalendarEventId } = nextQueuedTask.context.params;
                         
-                        if (!topic) {
-                           throw new Error("Missing 'topic' for content generation task.");
-                        }
+                        if (!topic) throw new Error("Missing 'topic' for content generation task.");
 
-                        // Ensure topic is a string for the Gemini service call
                         const topicNameString = typeof topic === 'string' ? topic : (topic as Topic).name;
                         
                         result = await generateContentFlow(
                             topicNameString,
-                            language || 'English', // Default language if not provided
+                            language || 'English',
                             shouldGenerateImage || false,
                             selectedPlatforms || new Set(),
                             onProgressCallback,
@@ -173,10 +185,8 @@ export const GenerationProvider: React.FC<{ children: React.ReactNode }> = ({ ch
                             controller.signal
                         );
 
-                        // CRITICAL CHECK: Abort before saving data.
                         if (controller.signal.aborted) throw new DOMException('Aborted', 'AbortError');
 
-                        // Save generated content if context is available (from dashboard or magic creator)
                         if (userId && topic && typeof topic !== 'string' && topic.id && project?.id && campaign?.id) {
                             const topicObj = topic as Topic;
                             const contentId = await saveGeneratedContent(userId, topicObj.name, language || 'English', result, {
@@ -185,40 +195,33 @@ export const GenerationProvider: React.FC<{ children: React.ReactNode }> = ({ ch
                                 topicId: topicObj.id,
                             });
 
-                            // Link back to calendar event if source ID is present
                             if (sourceCalendarEventId && contentId) {
                                 await linkContentToCalendarEvent(sourceCalendarEventId, contentId);
                             }
                         }
                     } 
-                    // --- Topic Generation (AI suggestions for new topics) ---
                     else if (nextQueuedTask.context.type === 'topics') {
                         const { project, campaign, count, userId } = nextQueuedTask.context.params;
-                        if (!project || !campaign || !count || !userId) {
-                            throw new Error("Missing parameters for topics generation.");
-                        }
+                        if (!project || !campaign || !count || !userId) throw new Error("Missing parameters for topics generation.");
+                        
                         const topicsArray = await generateTopicsAI(project, campaign, count, controller.signal);
-                        result = topicsArray; // Store the array of topic names
+                        result = topicsArray;
 
                         if (controller.signal.aborted) throw new DOMException('Aborted', 'AbortError');
 
                         await addMultipleTopics(result.map((name: string) => ({ name })), userId, project.id, campaign.id);
                     } 
-                    // --- Content Refinement (re-writing specific platform content) ---
                     else if (nextQueuedTask.context.type === 'refineContent') {
                         const { platform, topic, currentContent, userPrompt, language } = nextQueuedTask.context.params;
-                        if (!platform || !topic || !currentContent || !userPrompt || !language) {
-                            throw new Error("Missing parameters for content refinement.");
-                        }
+                        if (!platform || !topic || !currentContent || !userPrompt || !language) throw new Error("Missing parameters for content refinement.");
+                        
                         const topicNameString = typeof topic === 'string' ? topic : (topic as Topic).name;
                         result = await regeneratePlatformContent(platform, topicNameString, currentContent, userPrompt, language, controller.signal);
                     }
-                    // --- Existing Content Analysis ---
                     else if (nextQueuedTask.context.type === 'analyzeContent') {
                         const { content } = nextQueuedTask.context.params;
-                        if (!content || !content.id) {
-                            throw new Error("Missing content or content ID for analysis task.");
-                        }
+                        if (!content || !content.id) throw new Error("Missing content or content ID for analysis task.");
+                        
                         const platformsToAnalyze = (['web', 'tiktok', 'facebook'] as const).filter(p => content[p]);
                         onProgressCallback(25, 'Analyzing content...');
                         result = await analyzePerformance(content, platformsToAnalyze, controller.signal);
@@ -228,41 +231,41 @@ export const GenerationProvider: React.FC<{ children: React.ReactNode }> = ({ ch
                         onProgressCallback(75, 'Saving analysis...');
                         await updateContentAnalysis(content.id, result);
                     }
-                     // --- Calendar Suggestions ---
                     else if (nextQueuedTask.context.type === 'calendarSuggestions') {
                         const { calendarSettings, currentDate, userId } = nextQueuedTask.context.params;
-                        if (!calendarSettings || !currentDate || !userId) {
-                            throw new Error("Missing parameters for calendar suggestion generation.");
-                        }
+                        if (!calendarSettings || !currentDate || !userId) throw new Error("Missing parameters for calendar suggestion generation.");
+                        
                         onProgressCallback(25, 'Searching for trends and events...');
                         result = await generateCalendarSuggestions(calendarSettings, currentDate, controller.signal);
 
                         if (controller.signal.aborted) throw new DOMException('Aborted', 'AbortError');
 
                         onProgressCallback(75, 'Populating calendar...');
-                        
                         const eventsToAdd = (result as any[]).map((suggestion: any) => ({
-                            ...suggestion, // Keep all fields like insight and suggestedAngles
-                            start: suggestion.date,
+                            ...suggestion,
+                            start: suggestion.start, 
                             status: suggestion.type === 'trend' ? 'suggested_trend' : 'suggested_event',
                         }));
                         await addCalendarEventsBatch(userId, eventsToAdd);
                     }
                     
-                    // Task completed successfully
-                    updateTask(nextQueuedTask.id, { status: 'success', message: 'Generation complete!', progress: 100, generatedResult: result });
-                    // Call the success callback provided in the task context
-                    if (nextQueuedTask.context.onSuccess) {
-                        if (nextQueuedTask.context.type === 'refineContent' && nextQueuedTask.context.params.platform) {
-                            nextQueuedTask.context.onSuccess(result, nextQueuedTask.context.params.platform);
-                        } else {
-                            nextQueuedTask.context.onSuccess(result);
+                    // Success
+                    if (!controller.signal.aborted) {
+                        updateTask(nextQueuedTask.id, { status: 'success', message: 'Generation complete!', progress: 100, generatedResult: result });
+                        if (nextQueuedTask.context.onSuccess) {
+                            if (nextQueuedTask.context.type === 'refineContent' && nextQueuedTask.context.params.platform) {
+                                nextQueuedTask.context.onSuccess(result, nextQueuedTask.context.params.platform);
+                            } else {
+                                nextQueuedTask.context.onSuccess(result);
+                            }
                         }
                     }
 
                 } catch (e: any) {
-                    if (e.name === 'AbortError') {
-                        updateTask(nextQueuedTask.id, { status: 'cancelled', message: 'Generation cancelled.' });
+                    if (e.name === 'AbortError' || controller.signal.aborted) {
+                        // Logic handled in cancelGeneration (removing task) and finally block (clearing lock)
+                        // We don't need to updateTask here because cancelGeneration likely already removed it.
+                        console.log('Task aborted successfully.');
                     } else {
                         console.error(`Error during generation for task ${nextQueuedTask.id}:`, e);
                         const errorMessage = e.message || 'An unexpected error occurred.';
@@ -272,20 +275,21 @@ export const GenerationProvider: React.FC<{ children: React.ReactNode }> = ({ ch
                         }
                     }
                 } finally {
-                    // Reset active task state after completion, error, or cancellation
-                    setActiveGenerationId(null);
-                    activeController.current = null;
+                    // Ensure lock is released if it matches the current task
+                    // Note: cancelGeneration might have already done this synchronously, but this ensures cleanup for natural completion or errors.
+                    setActiveGenerationId(currentId => (currentId === nextQueuedTask.id ? null : currentId));
+                    if (activeController.current === controller) {
+                        activeController.current = null;
+                    }
                 }
             };
             executeTask();
         }
-    }, [tasks, activeGenerationId, updateTask, cancelGeneration]);
+    }, [tasks, activeGenerationId, updateTask]); // removed cancelGeneration from dependency to prevent cycle, though strictly it is stable
 
-    // Filter active tasks (queued, running, success, error) for display
     const activeGenerations = tasks.filter(
         task => ['queued', 'running', 'success', 'error'].includes(task.status)
     );
-    // Determine the primary active task for the modal (running first, then first queued)
     const activeTask = activeGenerations.find(t => t.status === 'running') || activeGenerations.find(t => t.status === 'queued') || null;
 
     const contextValue = {

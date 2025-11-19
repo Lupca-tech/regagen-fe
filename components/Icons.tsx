@@ -34,8 +34,10 @@ export const ListViewIcon: React.FC<{ className?: string }> = ({ className = 'w-
 export const SearchIcon: React.FC<{ className?: string }> = ({ className = 'w-5 h-5' }) => <LucideIcon className={className}><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></LucideIcon>;
 export const CloseIcon: React.FC<{ className?: string }> = ({ className = 'w-5 h-5' }) => <LucideIcon className={className}><path d="M18 6 6 18"/><path d="m6 6 12 12"/></LucideIcon>;
 export const XIcon: React.FC<{ className?: string }> = ({ className }) => <LucideIcon className={className}><path d="M18 6 6 18"/><path d="m6 6 12 12"/></LucideIcon>;
-export const SkeletonItem: React.FC = () => (<div className="bg-zinc-800/50 rounded-lg p-3 animate-pulse"><div className="h-4 bg-zinc-700 rounded w-3/4 mb-2"></div><div className="h-3 bg-zinc-700 rounded w-full"></div></div>);
+export const SkeletonItem: React.FC = () => (<div className="bg-gray-200 dark:bg-zinc-800/50 rounded-lg p-3 animate-pulse"><div className="h-4 bg-gray-300 dark:bg-zinc-700 rounded w-3/4 mb-2"></div><div className="h-3 bg-gray-300 dark:bg-zinc-700 rounded w-full"></div></div>);
 export const BellIcon: React.FC<{ className?: string }> = ({ className = 'w-5 h-5' }) => <LucideIcon className={className}><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></LucideIcon>;
+export const SunIcon: React.FC<{ className?: string }> = ({ className = 'w-5 h-5' }) => <LucideIcon className={className}><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></LucideIcon>;
+export const MoonIcon: React.FC<{ className?: string }> = ({ className = 'w-5 h-5' }) => <LucideIcon className={className}><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></LucideIcon>;
 
 
 // --- Platform Icons ---

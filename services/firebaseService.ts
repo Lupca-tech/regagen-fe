@@ -1,3 +1,4 @@
+
 import { initializeApp, type FirebaseApp, type FirebaseError } from 'firebase/app';
 import { 
   getAuth, 
@@ -543,7 +544,13 @@ export const getCalendarSettings = async (userId: string): Promise<CalendarSetti
             return docSnap.data() as CalendarSettings;
         }
         return null;
-    } catch (error) {
+    } catch (error: any) {
+        // Handle offline specifically. 'unavailable' or part of message indicates offline.
+        if (error.code === 'unavailable' || error.message.includes('offline')) {
+             console.warn("Firestore is offline. Returning null for settings to allow UI to render.");
+             return null; 
+        }
+
         if ((error as FirebaseError).code === 'permission-denied') {
              throw new Error("Permission Denied: Could not fetch your calendar settings. Please ensure your Firestore security rules allow users to read their own document at 'calendarSettings/{userId}'. The document ID must match the user's ID.");
         }
@@ -570,7 +577,11 @@ export const getCalendarEvents = async (userId: string, startDate: Date, endDate
                 start: startTimestamp.toDate().toISOString(),
             } as CalendarEvent;
         });
-    } catch (error) {
+    } catch (error: any) {
+        if (error.code === 'unavailable' || error.message.includes('offline')) {
+             console.warn("Firestore is offline. Returning empty events list.");
+             return []; 
+        }
         throw handleFirestoreError(error, 'calendar events');
     }
 };
@@ -579,11 +590,18 @@ export const addCalendarEventsBatch = async (userId: string, events: Omit<Calend
     try {
         const batch = writeBatch(db);
         events.forEach(event => {
+            // Ensure we have a valid date object before creating Timestamp
+            let dateObj = new Date(event.start);
+            if (isNaN(dateObj.getTime())) {
+                console.warn(`Invalid date for event "${event.title}": ${event.start}. Defaulting to now.`);
+                dateObj = new Date(); 
+            }
+
             const newEventRef = doc(collection(db, 'calendarEvents'));
             batch.set(newEventRef, {
                 ...event,
                 userId,
-                start: Timestamp.fromDate(new Date(event.start)), // Ensure start is a Firestore Timestamp
+                start: Timestamp.fromDate(dateObj), 
             });
         });
         await batch.commit();

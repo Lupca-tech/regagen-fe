@@ -48,37 +48,37 @@ const GenerationProgress: React.FC<{ steps: GenerationStep[], taskProgress: numb
     const overallProgress = (completedStepsCount * stepWeight) + runningProgress;
 
     return (
-        <div className="text-left max-w-2xl mx-auto bg-zinc-900/50 border border-zinc-700 p-6 rounded-xl animate-fade-in">
-            <h3 className="text-2xl font-bold text-center mb-4">Your Content is Being Created...</h3>
+        <div className="text-left max-w-2xl mx-auto bg-white dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-700 p-6 rounded-xl animate-fade-in shadow-lg dark:shadow-none">
+            <h3 className="text-2xl font-bold text-center mb-4 text-zinc-900 dark:text-white">Your Content is Being Created...</h3>
             
-            <div className="w-full bg-zinc-700 rounded-full h-2.5 mb-2 overflow-hidden">
+            <div className="w-full bg-zinc-200 dark:bg-zinc-700 rounded-full h-2.5 mb-2 overflow-hidden">
                 <div 
                     className="bg-gradient-to-r from-purple-500 to-pink-600 h-2.5 rounded-full transition-all duration-300 ease-linear" 
                     style={{ width: `${overallProgress}%` }}
                 ></div>
             </div>
-            <p className="text-center text-sm text-pink-400 font-mono tracking-wider mb-6">{overallProgress.toFixed(0)}% complete</p>
+            <p className="text-center text-sm text-pink-600 dark:text-pink-400 font-mono tracking-wider mb-6">{overallProgress.toFixed(0)}% complete</p>
 
             <ul className="space-y-4">
                 {steps.map(step => (
                     <li key={step.key} className="flex items-start gap-4">
                         <div className="flex-shrink-0 pt-1">
-                            {step.status === 'complete' && <CheckCircleIcon className="w-6 h-6 text-green-400" />}
-                            {step.status === 'running' && <div className="w-6 h-6 border-2 border-t-pink-500 border-zinc-600 rounded-full animate-spin"></div>}
-                            {step.status === 'pending' && <div className="w-6 h-6 border-2 border-zinc-600 rounded-full"></div>}
-                            {step.status === 'error' && <XCircleIcon className="w-6 h-6 text-red-400" />}
+                            {step.status === 'complete' && <CheckCircleIcon className="w-6 h-6 text-green-500 dark:text-green-400" />}
+                            {step.status === 'running' && <div className="w-6 h-6 border-2 border-t-pink-500 border-zinc-300 dark:border-zinc-600 rounded-full animate-spin"></div>}
+                            {step.status === 'pending' && <div className="w-6 h-6 border-2 border-zinc-300 dark:border-zinc-600 rounded-full"></div>}
+                            {step.status === 'error' && <XCircleIcon className="w-6 h-6 text-red-500 dark:text-red-400" />}
                         </div>
                         <div className="flex-grow">
-                            <p className={`font-semibold ${step.status === 'complete' ? 'text-zinc-300' : 'text-zinc-100'}`}>{step.label}</p>
+                            <p className={`font-semibold ${step.status === 'complete' ? 'text-zinc-800 dark:text-zinc-300' : 'text-zinc-500 dark:text-zinc-100'}`}>{step.label}</p>
                             {step.status === 'running' && step.key === 'content' && (
                                 <div className="mt-2 animate-fade-in-fast">
-                                    <p className="text-xs text-zinc-400 mb-1">{taskMessage}</p>
-                                    <div className="w-full bg-zinc-700 rounded-full h-1.5 overflow-hidden">
+                                    <p className="text-xs text-zinc-500 dark:text-zinc-400 mb-1">{taskMessage}</p>
+                                    <div className="w-full bg-zinc-200 dark:bg-zinc-700 rounded-full h-1.5 overflow-hidden">
                                         <div className="bg-gradient-to-r from-purple-500 to-pink-600 h-1.5 rounded-full" style={{ width: `${taskProgress}%`}}></div>
                                     </div>
                                 </div>
                             )}
-                            {step.status === 'error' && <p className="text-xs text-red-400 mt-1">{step.error}</p>}
+                            {step.status === 'error' && <p className="text-xs text-red-500 dark:text-red-400 mt-1">{step.error}</p>}
                         </div>
                     </li>
                 ))}
@@ -87,7 +87,7 @@ const GenerationProgress: React.FC<{ steps: GenerationStep[], taskProgress: numb
             <div className="mt-8 text-center">
                 <button
                     onClick={onCancel}
-                    className="flex items-center justify-center mx-auto px-4 py-2 text-sm font-semibold text-red-400 bg-transparent border border-red-500/50 rounded-lg hover:bg-red-900/30 hover:text-red-300 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-zinc-900 focus:ring-red-500 transition-all duration-300"
+                    className="flex items-center justify-center mx-auto px-4 py-2 text-sm font-semibold text-red-500 dark:text-red-400 bg-transparent border border-red-500/50 rounded-lg hover:bg-red-100 dark:hover:bg-red-900/30 hover:text-red-700 dark:hover:text-red-300 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-white dark:focus:ring-offset-zinc-900 focus:ring-red-500 transition-all duration-300"
                 >
                     <XCircleIcon className="w-5 h-5 mr-2" />
                     Cancel Generation
@@ -106,8 +106,8 @@ const GenerationCompleteDisplay: React.FC<{
 }> = React.memo(({ result, topicName, language, onNavigate, onReset }) => (
     <div className="animate-fade-in max-w-5xl mx-auto">
         <div className="text-center mb-8">
-            <h2 className="text-4xl font-black text-white">✨ Your Content is <span className="text-pink-400">Ready!</span> ✨</h2>
-            <p className="text-zinc-400 mt-2">Review your generated content below, or head to the dashboard to manage it.</p>
+            <h2 className="text-4xl font-black text-zinc-900 dark:text-white">✨ Your Content is <span className="text-pink-500 dark:text-pink-400">Ready!</span> ✨</h2>
+            <p className="text-zinc-600 dark:text-zinc-400 mt-2">Review your generated content below, or head to the dashboard to manage it.</p>
         </div>
 
         <ContentTabs
@@ -128,7 +128,7 @@ const GenerationCompleteDisplay: React.FC<{
             </button>
             <button
                 onClick={onReset}
-                className="w-full sm:w-auto flex items-center justify-center px-6 py-3 font-semibold text-pink-300 bg-transparent border-2 border-pink-500/50 rounded-lg hover:bg-pink-900/30 hover:text-white transition-colors"
+                className="w-full sm:w-auto flex items-center justify-center px-6 py-3 font-semibold text-pink-600 dark:text-pink-300 bg-transparent border-2 border-pink-500/50 rounded-lg hover:bg-pink-50 dark:hover:bg-pink-900/30 hover:text-pink-800 dark:hover:text-white transition-colors"
             >
                 <RocketIcon className="w-5 h-5 mr-2" />
                 Create Another
@@ -139,14 +139,14 @@ const GenerationCompleteDisplay: React.FC<{
 
 const PlatformSelector: React.FC<{ selectedPlatforms: Set<EditablePlatform>; onToggle: (id: EditablePlatform) => void; }> = React.memo(({ selectedPlatforms, onToggle }) => (
     <div>
-        <h3 className="text-center text-sm font-semibold text-zinc-300 mb-3">Choose Your Platforms</h3>
+        <h3 className="text-center text-sm font-semibold text-zinc-700 dark:text-zinc-300 mb-3">Choose Your Platforms</h3>
         <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
             {ALL_PLATFORMS.map(platform => {
                 const isSelected = selectedPlatforms.has(platform.id);
                 return (
-                    <button key={platform.id} onClick={() => onToggle(platform.id)} className={`flex flex-col items-center justify-center p-3 rounded-lg border-2 transition-all duration-200 ${isSelected ? 'border-pink-500 bg-pink-500/10' : 'border-gray-600 bg-gray-900/50 hover:border-gray-500'}`}>
-                        <platform.icon className={`w-6 h-6 mb-1 transition-colors ${isSelected ? 'text-pink-400' : 'text-zinc-400'}`} />
-                        <span className={`text-xs font-bold transition-colors ${isSelected ? 'text-white' : 'text-zinc-300'}`}>{platform.name}</span>
+                    <button key={platform.id} onClick={() => onToggle(platform.id)} className={`flex flex-col items-center justify-center p-3 rounded-lg border-2 transition-all duration-200 ${isSelected ? 'border-pink-500 bg-pink-50 dark:bg-pink-500/10' : 'border-zinc-200 dark:border-zinc-600 bg-white dark:bg-gray-900/50 hover:border-zinc-400 dark:hover:border-gray-500'}`}>
+                        <platform.icon className={`w-6 h-6 mb-1 transition-colors ${isSelected ? 'text-pink-500 dark:text-pink-400' : 'text-zinc-400'}`} />
+                        <span className={`text-xs font-bold transition-colors ${isSelected ? 'text-zinc-900 dark:text-white' : 'text-zinc-500 dark:text-zinc-300'}`}>{platform.name}</span>
                     </button>
                 )
             })}
@@ -166,31 +166,31 @@ const ScaffoldingSuggestions: React.FC<{
     selectedCampaignId: string;
     setSelectedCampaignId: (id: string) => void;
 }> = React.memo(({ isAnalyzing, onCancelAnalysis, scaffold, setScaffold, projects, filteredCampaigns, selectedProjectId, setSelectedProjectId, selectedCampaignId, setSelectedCampaignId }) => (
-    <div className="bg-zinc-900/50 p-4 rounded-lg border border-zinc-700 space-y-3">
+    <div className="bg-zinc-50 dark:bg-zinc-900/50 p-4 rounded-lg border border-zinc-200 dark:border-zinc-700 space-y-3">
         <div className="flex justify-between items-center">
-            <h3 className="text-sm font-semibold text-zinc-300">AI Structure Suggestions</h3>
+            <h3 className="text-sm font-semibold text-zinc-700 dark:text-zinc-300">AI Structure Suggestions</h3>
             {isAnalyzing && (
                 <div className="flex items-center gap-2 animate-fade-in-fast">
-                    <div className="w-4 h-4 border-2 border-t-pink-500 border-zinc-600 rounded-full animate-spin"></div>
-                    <button onClick={onCancelAnalysis} className="text-xs text-zinc-400 hover:text-white hover:underline pr-1" aria-label="Cancel analysis">Cancel</button>
+                    <div className="w-4 h-4 border-2 border-t-pink-500 border-zinc-300 dark:border-zinc-600 rounded-full animate-spin"></div>
+                    <button onClick={onCancelAnalysis} className="text-xs text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white hover:underline pr-1" aria-label="Cancel analysis">Cancel</button>
                 </div>
             )}
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            <select value={selectedProjectId} onChange={e => setSelectedProjectId(e.target.value)} className="w-full bg-zinc-800 border border-zinc-700 rounded-md p-2 text-sm">
+            <select value={selectedProjectId} onChange={e => setSelectedProjectId(e.target.value)} className="w-full bg-white dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 rounded-md p-2 text-sm text-zinc-900 dark:text-white">
                 <option value="__CREATE_NEW__">Create New Project</option>
                 {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
             </select>
-            <input type="text" value={scaffold.projectName} onChange={e => setScaffold(s => ({...s, projectName: e.target.value}))} disabled={selectedProjectId !== '__CREATE_NEW__'} placeholder="Project Name..." className="w-full bg-zinc-800 border border-zinc-700 rounded-md p-2 text-sm disabled:opacity-50" />
+            <input type="text" value={scaffold.projectName} onChange={e => setScaffold(s => ({...s, projectName: e.target.value}))} disabled={selectedProjectId !== '__CREATE_NEW__'} placeholder="Project Name..." className="w-full bg-white dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 rounded-md p-2 text-sm disabled:opacity-50 text-zinc-900 dark:text-white" />
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            <select value={selectedCampaignId} onChange={e => setSelectedCampaignId(e.target.value)} disabled={selectedProjectId !== '__CREATE_NEW__' && !filteredCampaigns.length} className="w-full bg-zinc-800 border border-zinc-700 rounded-md p-2 text-sm disabled:opacity-50">
+            <select value={selectedCampaignId} onChange={e => setSelectedCampaignId(e.target.value)} disabled={selectedProjectId !== '__CREATE_NEW__' && !filteredCampaigns.length} className="w-full bg-white dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 rounded-md p-2 text-sm disabled:opacity-50 text-zinc-900 dark:text-white">
                 <option value="__CREATE_NEW__">Create New Campaign</option>
                 {filteredCampaigns.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
-            <input type="text" value={scaffold.campaignName} onChange={e => setScaffold(s => ({...s, campaignName: e.target.value}))} disabled={selectedCampaignId !== '__CREATE_NEW__'} placeholder="Campaign Name..." className="w-full bg-zinc-800 border border-zinc-700 rounded-md p-2 text-sm disabled:opacity-50" />
+            <input type="text" value={scaffold.campaignName} onChange={e => setScaffold(s => ({...s, campaignName: e.target.value}))} disabled={selectedCampaignId !== '__CREATE_NEW__'} placeholder="Campaign Name..." className="w-full bg-white dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 rounded-md p-2 text-sm disabled:opacity-50 text-zinc-900 dark:text-white" />
         </div>
-        <input type="text" value={scaffold.topicName} onChange={e => setScaffold(s => ({...s, topicName: e.target.value}))} placeholder="Topic / Article Title..." className="w-full bg-zinc-800 border border-zinc-700 rounded-md p-2 text-sm" />
+        <input type="text" value={scaffold.topicName} onChange={e => setScaffold(s => ({...s, topicName: e.target.value}))} placeholder="Topic / Article Title..." className="w-full bg-white dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 rounded-md p-2 text-sm text-zinc-900 dark:text-white" />
     </div>
 ));
 
@@ -199,10 +199,10 @@ const AdvancedOptions: React.FC<any> = React.memo(({ showAdvanced, ...props }) =
         <div className="space-y-6 pt-2">
             <ScaffoldingSuggestions {...props} />
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                <select value={props.language} onChange={e => props.setLanguage(e.target.value)} className="w-full bg-zinc-800 border border-zinc-700 rounded-md p-2 text-sm">
+                <select value={props.language} onChange={e => props.setLanguage(e.target.value)} className="w-full bg-white dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 rounded-md p-2 text-sm text-zinc-900 dark:text-white">
                     {LANGUAGES.map(l => <option key={l.code} value={l.code}>{l.name}</option>)}
                 </select>
-                <select value={props.selectedProfileId} onChange={e => props.setSelectedProfileId(e.target.value)} className="w-full bg-zinc-800 border border-zinc-700 rounded-md p-2 text-sm">
+                <select value={props.selectedProfileId} onChange={e => props.setSelectedProfileId(e.target.value)} className="w-full bg-white dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 rounded-md p-2 text-sm text-zinc-900 dark:text-white">
                     <option value="default">Default Brand Voice</option>
                     {props.brandVoices.map((p: BrandVoiceProfile) => <option key={p.id} value={p.id}>{p.name}</option>)}
                 </select>
@@ -212,10 +212,10 @@ const AdvancedOptions: React.FC<any> = React.memo(({ showAdvanced, ...props }) =
                 <label className="flex items-center cursor-pointer">
                     <div className="relative">
                         <input type="checkbox" checked={props.shouldGenerateImage} onChange={e => props.setShouldGenerateImage(e.target.checked)} className="sr-only" />
-                        <div className={`block w-12 h-6 rounded-full transition-colors ${props.shouldGenerateImage ? 'bg-pink-600' : 'bg-zinc-700'}`}></div>
+                        <div className={`block w-12 h-6 rounded-full transition-colors ${props.shouldGenerateImage ? 'bg-pink-600' : 'bg-zinc-300 dark:bg-zinc-700'}`}></div>
                         <div className={`dot absolute left-1 top-1 bg-white w-4 h-4 rounded-full transition-transform ${props.shouldGenerateImage ? 'translate-x-6' : ''}`}></div>
                     </div>
-                    <span className="ml-3 text-sm text-zinc-300">Generate Visual Assets</span>
+                    <span className="ml-3 text-sm text-zinc-700 dark:text-zinc-300">Generate Visual Assets</span>
                 </label>
             </div>
         </div>
@@ -249,6 +249,18 @@ export const MagicCreatorDashboard: React.FC<MagicCreatorDashboardProps> = ({ us
 
     const debouncedUserInput = useDebounce(userInput, 1000);
     const analysisControllerRef = useRef<AbortController | null>(null);
+
+    // --- EFFECT: Warn on Browser Refresh/Close ---
+    useEffect(() => {
+        const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+            if (viewState === 'generating') {
+                e.preventDefault();
+                e.returnValue = ''; // Chrome requires returnValue to be set
+            }
+        };
+        window.addEventListener('beforeunload', handleBeforeUnload);
+        return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+    }, [viewState]);
 
     // --- DATA FETCHING & ANALYSIS ---
     useEffect(() => {
@@ -347,19 +359,21 @@ export const MagicCreatorDashboard: React.FC<MagicCreatorDashboardProps> = ({ us
 
     const handleReset = useCallback(() => {
         setViewState('input');
-        setUserInput('');
-        setScaffold({ projectName: '', campaignName: '', topicName: '' });
+        // We do NOT reset the userInput so the user can easily tweak and try again
+        // setUserInput(''); 
         setGenerationResult(null);
         setGenerationSteps([]);
         setError(null);
-        setSelectedProjectId('__CREATE_NEW__'); // Reset selection
-        setSelectedCampaignId('__CREATE_NEW__'); // Reset selection
     }, []);
 
     const handleCancelGeneration = useCallback(() => {
+        const confirmCancel = window.confirm("Generation is in progress. Cancelling now will stop the process and you will lose current progress. Are you sure?");
+        if (!confirmCancel) return;
+
         if (generationTask?.id) {
             cancelGeneration(generationTask.id);
         }
+        // Reset UI immediately to allow new attempts
         handleReset();
     }, [generationTask, cancelGeneration, handleReset]);
     
@@ -415,8 +429,13 @@ export const MagicCreatorDashboard: React.FC<MagicCreatorDashboardProps> = ({ us
             const selectedProfile = brandVoices.find(p => p.id === selectedProfileId);
             const generationContext = { projectId: finalProjectId, campaignId: finalCampaignId, topicId: finalTopicId };
 
+            // We use a unique ID based on time to avoid collision, but startGeneration will also enforce singleton for magicCreator
             startGeneration({
-                id: `magic-${finalTopicId}`, topicName: finalTopicName, status: 'queued', progress: 0, message: 'Queued...',
+                id: `magic-${finalTopicId}-${Date.now()}`, 
+                topicName: finalTopicName, 
+                status: 'queued', 
+                progress: 0, 
+                message: 'Queued...',
                 context: {
                     type: 'content', view: 'magicCreator',
                     params: {
@@ -444,11 +463,11 @@ export const MagicCreatorDashboard: React.FC<MagicCreatorDashboardProps> = ({ us
 
     if (!user) {
         return (
-            <div className="relative p-8 mt-12 mb-6 bg-gradient-to-tr from-pink-900/40 via-purple-900/40 to-pink-900/40 border border-pink-500/30 rounded-xl overflow-hidden animate-fade-in max-w-xl mx-auto">
+            <div className="relative p-8 mt-12 mb-6 bg-gradient-to-tr from-pink-900/40 via-purple-900/40 to-pink-900/40 border border-pink-500/30 rounded-xl overflow-hidden animate-fade-in max-w-xl mx-auto shadow-xl">
                 <div className="relative z-10 flex flex-col items-center text-center gap-4">
                     <h3 className="text-3xl font-bold text-white tracking-tight">Unleash the Magic Creator</h3>
-                    <p className="text-zinc-300 max-w-md">Sign up or log in to automate your entire content workflow from a single idea.</p>
-                    <button onClick={onOpenAuthModal} className="mt-4 flex items-center justify-center px-8 py-3 font-bold text-lg text-white bg-gradient-to-r from-purple-500 to-pink-600 rounded-lg">
+                    <p className="text-zinc-200 max-w-md">Sign up or log in to automate your entire content workflow from a single idea.</p>
+                    <button onClick={onOpenAuthModal} className="mt-4 flex items-center justify-center px-8 py-3 font-bold text-lg text-white bg-gradient-to-r from-purple-500 to-pink-600 rounded-lg hover:shadow-lg hover:shadow-pink-500/25 transition-all">
                         <MagicWandIcon className="w-6 h-6 mr-2"/> Start Creating Now
                     </button>
                 </div>
@@ -465,23 +484,23 @@ export const MagicCreatorDashboard: React.FC<MagicCreatorDashboardProps> = ({ us
     }
 
     return (
-        <div className="bg-gray-800/50 backdrop-blur-sm p-6 rounded-xl border border-gray-700 shadow-lg space-y-4 text-left animate-fade-in">
-            {error && <p className="text-red-400 text-sm text-center bg-red-900/30 p-2 rounded-md">{error}</p>}
+        <div className="bg-white/80 dark:bg-gray-800/50 backdrop-blur-sm p-6 rounded-xl border border-zinc-200 dark:border-gray-700 shadow-lg space-y-4 text-left animate-fade-in transition-colors duration-300">
+            {error && <p className="text-red-500 dark:text-red-400 text-sm text-center bg-red-100 dark:bg-red-900/30 p-2 rounded-md">{error}</p>}
             
             <div>
-                <label htmlFor="magic-input" className="text-lg font-bold text-zinc-200 block mb-2 text-center">Start with anything. An idea, a post, a link...</label>
+                <label htmlFor="magic-input" className="text-lg font-bold text-zinc-800 dark:text-zinc-200 block mb-2 text-center">Start with anything. An idea, a post, a link...</label>
                 <textarea 
                     id="magic-input" value={userInput} onChange={e => setUserInput(e.target.value)}
                     placeholder="e.g., 'A blog post about the benefits of solid-state batteries for electric vehicles'"
                     rows={4}
-                    className="w-full p-4 bg-gray-900/70 border-2 border-gray-600 rounded-lg focus:ring-2 focus:ring-pink-500 focus:outline-none transition-all duration-300 placeholder-gray-500 resize-none"
+                    className="w-full p-4 bg-white dark:bg-gray-900/70 border-2 border-zinc-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-pink-500 focus:outline-none transition-all duration-300 placeholder-zinc-400 dark:placeholder-gray-500 resize-none text-zinc-900 dark:text-white"
                 />
             </div>
 
-            <div className="text-center border-t border-b border-zinc-700/50 py-3">
-                <button onClick={() => setShowAdvanced(!showAdvanced)} className="flex items-center justify-center w-full text-zinc-300 hover:text-white transition-colors group" aria-expanded={showAdvanced}>
+            <div className="text-center border-t border-b border-zinc-200 dark:border-zinc-700/50 py-3">
+                <button onClick={() => setShowAdvanced(!showAdvanced)} className="flex items-center justify-center w-full text-zinc-600 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-white transition-colors group" aria-expanded={showAdvanced}>
                     <span className="font-semibold text-sm">{showAdvanced ? 'Hide' : 'Show'} Advanced Options</span>
-                    <ChevronDownIcon className={`w-5 h-5 ml-2 text-zinc-400 group-hover:text-white transition-transform duration-300 ${showAdvanced ? 'rotate-180' : ''}`} />
+                    <ChevronDownIcon className={`w-5 h-5 ml-2 text-zinc-400 group-hover:text-zinc-600 dark:group-hover:text-white transition-transform duration-300 ${showAdvanced ? 'rotate-180' : ''}`} />
                 </button>
                 {!showAdvanced && <p className="text-xs text-zinc-500 mt-2 animate-fade-in-fast">Customize project, platforms & brand voice. If not, we'll create them for you.</p>}
             </div>
@@ -513,7 +532,7 @@ export const MagicCreatorDashboard: React.FC<MagicCreatorDashboardProps> = ({ us
                 <button
                     onClick={handleGenerate}
                     disabled={userInput.trim().length < 10 || selectedPlatforms.size === 0 || isAnalyzing}
-                    className="w-full sm:w-auto flex items-center justify-center px-8 py-3 font-semibold text-white bg-gradient-to-r from-purple-500 to-pink-600 rounded-lg hover:from-purple-600 hover:to-pink-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="w-full sm:w-auto flex items-center justify-center px-8 py-3 font-semibold text-white bg-gradient-to-r from-purple-500 to-pink-600 rounded-lg hover:from-purple-600 hover:to-pink-700 disabled:opacity-50 disabled:cursor-not-allowed shadow-md hover:shadow-lg transition-all"
                 >
                     <MagicWandIcon className="w-5 h-5 mr-2"/>
                     Create Everything

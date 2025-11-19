@@ -1,11 +1,23 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" class="dark">
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>RageGen - Create The Trend</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        darkMode: 'class',
+        theme: {
+          extend: {
+            fontFamily: {
+              sans: ['Inter', 'sans-serif'],
+            }
+          }
+        }
+      }
+    </script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&display=swap" rel="stylesheet">
@@ -27,7 +39,7 @@
   <style>
     body {
       font-family: 'Inter', sans-serif;
-      background-color: #000000;
+      /* Removed hardcoded background-color to allow Tailwind classes to control it */
     }
     
     /* Scroll-triggered animation classes */
@@ -93,7 +105,7 @@
   </style>
 <link rel="stylesheet" href="/index.css">
 </head>
-  <body class="bg-black text-white">
+  <body class="bg-gray-50 dark:bg-black text-zinc-900 dark:text-white transition-colors duration-300">
     <div id="root"></div>
     <script type="module" src="/index.tsx"></script>
   </body>

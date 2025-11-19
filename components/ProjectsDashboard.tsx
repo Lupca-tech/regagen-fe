@@ -493,7 +493,7 @@ export const ProjectsDashboard: React.FC<ProjectsDashboardProps> = ({ user, onNa
     if (activeTopic && (viewedContent || loading.content)) {
         return (
             <section className="animate-fade-in min-h-[70vh]">
-                <button onClick={handleBackToDashboard} className="flex items-center gap-2 text-sm text-zinc-400 hover:text-white transition-colors mb-4">
+                <button onClick={handleBackToDashboard} className="flex items-center gap-2 text-sm text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white transition-colors mb-4">
                     <BackIcon />
                     Back to Dashboard
                 </button>
@@ -515,9 +515,9 @@ export const ProjectsDashboard: React.FC<ProjectsDashboardProps> = ({ user, onNa
     return (
         <>
             {error && (
-                <div className="bg-red-900/20 border border-red-500/50 rounded-lg p-4 mb-6 text-red-300 animate-fade-in flex justify-between items-center">
+                <div className="bg-red-100 dark:bg-red-900/20 border border-red-200 dark:border-red-500/50 rounded-lg p-4 mb-6 text-red-600 dark:text-red-300 animate-fade-in flex justify-between items-center">
                     <p>{error}</p>
-                    <button onClick={() => setError(null)} className="text-xl font-bold hover:text-white transition-colors">&times;</button>
+                    <button onClick={() => setError(null)} className="text-xl font-bold hover:text-zinc-900 dark:hover:text-white transition-colors">&times;</button>
                 </div>
             )}
             
@@ -537,14 +537,14 @@ export const ProjectsDashboard: React.FC<ProjectsDashboardProps> = ({ user, onNa
                                 setSearchQuery(e.target.value);
                                 if (e.target.value) setProjectViewMode('list');
                             }}
-                            className="w-full pl-10 pr-4 py-2 bg-zinc-800 border border-zinc-700 rounded-lg focus:ring-2 focus:ring-pink-500 focus:outline-none placeholder-zinc-500"
+                            className="w-full pl-10 pr-4 py-2 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg focus:ring-2 focus:ring-pink-500 focus:outline-none placeholder-zinc-400 dark:placeholder-zinc-500 text-zinc-900 dark:text-white transition-colors"
                         />
                     </div>
-                    <div className="flex items-center justify-center bg-zinc-800/50 p-1 rounded-lg">
-                         <button onClick={() => setProjectViewMode('board')} className={`flex items-center gap-2 px-3 py-1.5 text-sm rounded-md transition-colors ${projectViewMode === 'board' ? 'bg-zinc-700 text-white' : 'text-zinc-400 hover:text-white'}`}>
+                    <div className="flex items-center justify-center bg-white dark:bg-zinc-800/50 p-1 rounded-lg border border-zinc-200 dark:border-zinc-700">
+                         <button onClick={() => setProjectViewMode('board')} className={`flex items-center gap-2 px-3 py-1.5 text-sm rounded-md transition-colors ${projectViewMode === 'board' ? 'bg-zinc-100 dark:bg-zinc-700 text-zinc-900 dark:text-white font-semibold shadow-sm' : 'text-zinc-500 dark:text-zinc-400 hover:text-zinc-800 dark:hover:text-white'}`}>
                             <BoardViewIcon /> Board
                          </button>
-                         <button onClick={() => setProjectViewMode('list')} className={`flex items-center gap-2 px-3 py-1.5 text-sm rounded-md transition-colors ${projectViewMode === 'list' ? 'bg-zinc-700 text-white' : 'text-zinc-400 hover:text-white'}`}>
+                         <button onClick={() => setProjectViewMode('list')} className={`flex items-center gap-2 px-3 py-1.5 text-sm rounded-md transition-colors ${projectViewMode === 'list' ? 'bg-zinc-100 dark:bg-zinc-700 text-zinc-900 dark:text-white font-semibold shadow-sm' : 'text-zinc-500 dark:text-zinc-400 hover:text-zinc-800 dark:hover:text-white'}`}>
                             <ListViewIcon /> List
                          </button>
                     </div>

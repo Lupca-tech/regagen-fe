@@ -2,7 +2,8 @@ import React, { useState } from 'react';
 import { signOutUser } from '../services/firebaseService';
 import type { User } from 'firebase/auth';
 import type { View } from '../types';
-import { SignInIcon, MagicWandIcon, ProjectsIcon, BrandVoiceIcon, AccountIcon, SignOutIcon, ChevronDownIcon, CalendarIcon, RadarIcon } from './Icons';
+import { SignInIcon, MagicWandIcon, ProjectsIcon, BrandVoiceIcon, AccountIcon, SignOutIcon, ChevronDownIcon, CalendarIcon, RadarIcon, SunIcon, MoonIcon } from './Icons';
+import { useTheme } from '../contexts/ThemeContext';
 
 interface HeaderProps {
     user: User | null;
@@ -30,7 +31,7 @@ const UserMenu: React.FC<{ user: User; onNavigate: (view: View) => void; current
 
     return (
         <div className="relative">
-            <button onClick={() => setIsOpen(!isOpen)} className="flex items-center gap-2">
+            <button onClick={() => setIsOpen(!isOpen)} className="flex items-center gap-2 text-zinc-800 dark:text-zinc-200">
                 <img
                     src={user.photoURL || `https://api.dicebear.com/8.x/bottts/svg?seed=${user.uid}`}
                     alt="User"
@@ -41,7 +42,7 @@ const UserMenu: React.FC<{ user: User; onNavigate: (view: View) => void; current
             </button>
             {isOpen && (
                 <div 
-                    className="absolute right-0 mt-3 w-56 bg-zinc-900 border border-zinc-700 rounded-lg shadow-lg animate-fade-in-fast"
+                    className="absolute right-0 mt-3 w-56 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg shadow-lg animate-fade-in-fast"
                     onClick={(e) => e.stopPropagation()}
                 >
                     <ul className="p-2">
@@ -50,7 +51,7 @@ const UserMenu: React.FC<{ user: User; onNavigate: (view: View) => void; current
                                 <button
                                     onClick={() => handleNavigation(item.view)}
                                     className={`w-full flex items-center gap-3 px-3 py-2 text-sm rounded-md transition-colors ${
-                                        currentView === item.view ? 'bg-pink-600/20 text-pink-300' : 'text-zinc-300 hover:bg-zinc-800'
+                                        currentView === item.view ? 'bg-pink-600/20 text-pink-600 dark:text-pink-300' : 'text-zinc-600 dark:text-zinc-300 hover:bg-gray-100 dark:hover:bg-zinc-800'
                                     }`}
                                 >
                                     <item.icon className="w-5 h-5" />
@@ -59,11 +60,11 @@ const UserMenu: React.FC<{ user: User; onNavigate: (view: View) => void; current
                             </li>
                         ))}
                        
-                        <li><hr className="my-2 border-zinc-700" /></li>
+                        <li><hr className="my-2 border-zinc-200 dark:border-zinc-700" /></li>
                         <li>
                             <button
                                 onClick={signOutUser}
-                                className="w-full flex items-center gap-3 px-3 py-2 text-sm text-red-400 hover:bg-red-500/10 rounded-md transition-colors"
+                                className="w-full flex items-center gap-3 px-3 py-2 text-sm text-red-500 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-500/10 rounded-md transition-colors"
                             >
                                 <SignOutIcon />
                                 Sign Out
@@ -77,20 +78,30 @@ const UserMenu: React.FC<{ user: User; onNavigate: (view: View) => void; current
 });
 
 export const Header: React.FC<HeaderProps> = ({ user, onNavigate, currentView, onOpenAuthModal }) => {
+    const { theme, toggleTheme } = useTheme();
+
     return (
-        <header className="fixed top-0 left-0 right-0 z-40 bg-black/50 backdrop-blur-md border-b border-zinc-900">
+        <header className="fixed top-0 left-0 right-0 z-40 bg-white/80 dark:bg-black/50 backdrop-blur-md border-b border-zinc-200 dark:border-zinc-900 transition-colors duration-300">
             <div className="container mx-auto px-4 h-20 flex justify-between items-center">
-                <button onClick={() => onNavigate(user ? 'projects' : 'magicCreator')} className="text-2xl font-black uppercase tracking-tighter">
+                <button onClick={() => onNavigate(user ? 'projects' : 'magicCreator')} className="text-2xl font-black uppercase tracking-tighter text-zinc-900 dark:text-white">
                     Rage<span className="text-pink-500">Gen</span>
                 </button>
 
-                <nav>
+                <nav className="flex items-center gap-4">
+                    <button
+                        onClick={toggleTheme}
+                        className="p-2 rounded-full text-zinc-600 dark:text-zinc-400 hover:bg-gray-200 dark:hover:bg-zinc-800 transition-colors"
+                        aria-label="Toggle theme"
+                    >
+                        {theme === 'dark' ? <SunIcon className="w-5 h-5" /> : <MoonIcon className="w-5 h-5" />}
+                    </button>
+
                     {user ? (
                        <UserMenu user={user} onNavigate={onNavigate} currentView={currentView} />
                     ) : (
                         <button
                             onClick={onOpenAuthModal}
-                            className="flex items-center justify-center px-4 py-2 font-semibold text-white bg-transparent border-2 border-pink-500 rounded-lg hover:bg-pink-500 transition-colors duration-300"
+                            className="flex items-center justify-center px-4 py-2 font-semibold text-zinc-900 dark:text-white bg-transparent border-2 border-pink-500 rounded-lg hover:bg-pink-500 hover:text-white transition-colors duration-300"
                         >
                             <SignInIcon className="w-5 h-5 mr-2" />
                             Sign In
